@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="NUnit" Version="4.4.0" />
       <PackageReference Include="Raylib-cs" Version="7.0.1" />
     </ItemGroup>
 
