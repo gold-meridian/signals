@@ -14,6 +14,12 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
         return new EntityQuery(_world, r, ExcludedMask);
     }
 
+    public EntityQuery Without<T>() where T : struct {
+        var e = ExcludedMask; 
+        e.Set(World.Cache<T>.Id);
+        return new EntityQuery(_world, RequiredMask, e);
+    }
+    
     public Iterator Iterate() => new Iterator(_world, this);
 
     public unsafe ref struct Iterator {
