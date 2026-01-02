@@ -8,6 +8,8 @@ namespace Signals.V2;
 public static class ComponentStore {
     private static int nextId = 0;
     private static readonly Dictionary<Type, int> indices = new();
+    private static Type[] idToType = new Type[64];
+    
     public static int Count => nextId;
     
     public static int GetId<T>() where T : struct => GetId(typeof(T));
@@ -15,9 +17,16 @@ public static class ComponentStore {
     public static int GetId(Type type) {
         lock (indices) {
             if (indices.TryGetValue(type, out int id)) return id;
+            
+            if (nextId >= idToType.Length) 
+                Array.Resize(ref idToType, idToType.Length * 2);
+            
+            idToType[nextId] = type;
             return indices[type] = nextId++;
         }
     }
+    
+    public static Type GetType(int id) => idToType[id];
 }
 
 public readonly struct Sender<TSignal>(World world) where TSignal : struct {
@@ -35,7 +44,7 @@ public sealed class World : IDisposable {
         public static readonly int Id = ComponentStore.GetId(typeof(T));
     }
     
-    internal uint[] _generations = new uint[1024];
+    internal ushort[] _generations = new ushort[1024];
     private Stack<uint> _freeIds = new();
     private uint _nextId = 0;
 
@@ -45,22 +54,22 @@ public sealed class World : IDisposable {
     internal BitmaskArray256 PresenceMask = new();
     
     public static readonly World[] AllWorlds = new World[ushort.MaxValue];
-    public readonly int Id;
+    public readonly ushort Id;
     private static int worldIdCounter = 0;
 
     public World() {
-        Id = Interlocked.Increment(ref worldIdCounter);
+        Id = (ushort)Interlocked.Increment(ref worldIdCounter);
         AllWorlds[Id] = this;
     }
 
     public Entity Create() {
-        uint id = _freeIds.TryPop(out var freeId) ? freeId : _nextId++;
+        var id = _freeIds.TryPop(out var freeId) ? freeId : _nextId++;
         if (id >= _generations.Length) Grow(id);
         
         _generations[id]++;
         _masks[id] = default;
         PresenceMask.Set((int)id);
-        return new Entity((uint)id, _generations[id], this);
+        return new Entity((uint)id, _generations[id], Id);
     }
 
     public void Destroy(uint id, uint generation) {

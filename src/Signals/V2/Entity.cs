@@ -1,4 +1,8 @@
-﻿namespace Signals.V2;
+﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
+namespace Signals.V2;
 
 /// <summary>
 ///     A lightweight versioned handle representing an entity within a <see cref="World"/>.
@@ -11,19 +15,34 @@
 ///     It stores an <see cref="Id">index</see> and a <see cref="Generation">generation</see>. If an entity is destroyed, and
 ///     its index is reused / recycled, the old handle will have a mismatched generation and will be considered invalid.
 /// </remarks>
-public readonly struct Entity(uint id, uint generation, World world) {
+[StructLayout(LayoutKind.Explicit, Size = 8)]
+[DebuggerTypeProxy(typeof(EntityDebugView))]
+[method: MethodImpl(MethodImplOptions.AggressiveInlining)]
+public readonly struct Entity(uint id, ushort generation, ushort world) {
+    /// <summary>
+    ///     The size of the <see cref="Entity"/> struct in bytes.
+    /// </summary>
+    public static readonly int SIZE = GetSize();
+
+    private static unsafe int GetSize() => sizeof(Entity);
+    
     /// <summary>
     ///     The raw index of this entity in its parent worlds storage. 
     /// </summary>
+    [FieldOffset(0)]
     public readonly uint Id = id;
     /// <summary>
     ///     The version of this entity. Used to prevent stale entity handles.
     /// </summary>
-    public readonly uint Generation = generation;
+    [FieldOffset(4)]
+    public readonly ushort Generation = generation;
     /// <summary>
     ///     The parent world that owns and manages the data for this entity.
     /// </summary>
-    public readonly World World = world;
+    [FieldOffset(6)]
+    public readonly ushort WorldId = world;
+    
+    public World World => World.AllWorlds[WorldId];
     
     /// <summary>
     ///     Checks if an entity is currently active in its world.
@@ -63,9 +82,42 @@ public readonly struct Entity(uint id, uint generation, World world) {
     ///     Any existing <see cref="Entity"/> handles pointing to this ID will immediately become invalid.
     /// </remarks>
     public void Destroy() => World.Destroy(Id, Generation);
+    
+    internal object? GetDebug(Type t) {
+        try {
+            var method = typeof(World).GetMethod("Get", [typeof(uint), typeof(ushort)])
+                ?.MakeGenericMethod(t);
+            return method?.Invoke(World, [Id, Generation]);
+        } catch {
+            return null;
+        }
+    }
 
-    internal class DebugView(Entity entity) {
-        
+    internal sealed class EntityDebugView(Entity target) {
+        public uint Id => target.Id;
+        public ushort Generation => target.Generation;
+        public bool IsAlive => target.IsAlive;
+
+        [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
+        public Dictionary<Type, object> Components {
+            get {
+                var components = new Dictionary<Type, object>();
+                if (!target.IsAlive) return components;
+
+                var world = target.World;
+                var mask = world._masks[target.Id];
+
+                for (int i = 0; i < ComponentStore.Count; i++) {
+                    if (mask.IsSet(i)) {
+                        var type = ComponentStore.GetType(i);
+                        var data = target.GetDebug(type);
+                        if (data != null) 
+                            components[type] = data;
+                    }
+                }
+                return components;
+            }
+        }
     }
 }
 

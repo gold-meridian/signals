@@ -14,11 +14,6 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
         return new EntityQuery(_world, r, ExcludedMask);
     }
 
-    public EntityQuery Without<T>() where T : struct {
-        var e = ExcludedMask; e.Set(World.Cache<T>.Id);
-        return new EntityQuery(_world, RequiredMask, e);
-    }
-
     public Iterator Iterate() => new Iterator(_world, this);
 
     public unsafe ref struct Iterator {
@@ -27,7 +22,7 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
         private readonly Bitset256 _ex;
         private readonly Bitset256[] _presence;
         private readonly Bitset256* _masksPtr;
-        private readonly int* _gensPtr;
+        private readonly ushort* _gensPtr;
 
         private int _chunkIdx;
         private Bitset256 _currentChunk;
@@ -39,7 +34,7 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
             _ex = q.ExcludedMask;
             _presence = world.PresenceMask.Array ?? Array.Empty<Bitset256>();
             _masksPtr = (Bitset256*)Unsafe.AsPointer(ref world._masks[0]);
-            _gensPtr = (int*)Unsafe.AsPointer(ref world._generations[0]);
+            _gensPtr = (ushort*)Unsafe.AsPointer(ref world._generations[0]);
             _chunkIdx = 0;
             _index = -1;
             if (_presence.Length > 0) _currentChunk = _presence[0];
@@ -48,7 +43,7 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Entity? Next() {
             while (_chunkIdx < _presence.Length) {
-                var bit = _currentChunk.FirstSetBit();
+                int bit = _currentChunk.FirstSetBit();
                 if (bit >= Bitset256.CAPACITY) {
                     _chunkIdx++;
                     if (_chunkIdx < _presence.Length) _currentChunk = _presence[_chunkIdx];
@@ -58,8 +53,9 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
                 _currentChunk.Clear(bit);
                 _index = (_chunkIdx << 8) + bit;
 
-                if (_masksPtr[_index].Contains(_req) && !_masksPtr[_index].AndAny(_ex))
-                    return new Entity((uint)_index, (uint)_gensPtr[_index], _world);
+                if (_masksPtr[_index].Contains(_req) && !_masksPtr[_index].AndAny(_ex)) {
+                    return new Entity((uint)_index, _gensPtr[_index], _world.Id);
+                }
             }
             return null;
         }
