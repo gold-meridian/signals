@@ -11,15 +11,15 @@
 ///     It stores an <see cref="Id">index</see> and a <see cref="Generation">generation</see>. If an entity is destroyed, and
 ///     its index is reused / recycled, the old handle will have a mismatched generation and will be considered invalid.
 /// </remarks>
-public readonly struct Entity(int id, int generation, World world) {
+public readonly struct Entity(uint id, uint generation, World world) {
     /// <summary>
     ///     The raw index of this entity in its parent worlds storage. 
     /// </summary>
-    public readonly int Id = id;
+    public readonly uint Id = id;
     /// <summary>
     ///     The version of this entity. Used to prevent stale entity handles.
     /// </summary>
-    public readonly int Generation = generation;
+    public readonly uint Generation = generation;
     /// <summary>
     ///     The parent world that owns and manages the data for this entity.
     /// </summary>
@@ -63,4 +63,38 @@ public readonly struct Entity(int id, int generation, World world) {
     ///     Any existing <see cref="Entity"/> handles pointing to this ID will immediately become invalid.
     /// </remarks>
     public void Destroy() => World.Destroy(Id, Generation);
+
+    internal class DebugView(Entity entity) {
+        
+    }
+}
+
+public static class EntityExt {
+    extension(Entity entity) {
+        public EntityView<T1, T2> View<T1, T2>() where T1 : struct where T2 : struct {
+            return new(entity);
+        }
+    }
+}
+
+/// <summary>
+///     A view of an entity that lives on the stack, containing pre-cached component references.
+///     Reduces lookup cost by resolving all component storage locations once upon creation.
+/// </summary>
+public readonly ref struct EntityView<T1, T2> 
+    where T1 : struct 
+    where T2 : struct
+{
+    public readonly Entity Entity;
+    public readonly ref T1 Component1;
+    public readonly ref T2 Component2;
+
+    public EntityView(Entity entity) {
+        if (!entity.IsAlive) 
+            throw new InvalidOperationException("cannot create view for dead entity!");
+            
+        Entity = entity;
+        Component1 = ref entity.Get<T1>();
+        Component2 = ref entity.Get<T2>();
+    }
 }

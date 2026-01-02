@@ -1,163 +1,54 @@
 ﻿using System.Diagnostics;
 using System.Numerics;
 using System.Reflection;
-using Raylib_cs;
-using Signals.Core;
-using static Raylib_cs.Raylib;
-using static Raylib_cs.Raymath;
+using Signals.V2;
 
 namespace Sample;
 
-internal struct Position : IComponent
-{
-    public Vector2 Value;
-}
+public struct Position { public float X; public float Y; }
+public struct Velocity { public float X; public float Y; }
 
-internal struct Velocity : IComponent
-{
-    public Vector2 Value;
-}
+class Program {
+    static void Main() {
+        using var world = new World();
+        
+        const int total_count = 100_000;
+        var sw = Stopwatch.StartNew();
 
-public struct Transform2D : IComponent
-{
-    public Vector2 Position;
-    public float Rotation;
-    public Vector2 Scale;
-}
-
-internal struct TestComponent : IComponent
-{
-    public int Data;
-}
-
-internal struct Controllable : IComponent;
-
-public static class Program
-{
-    public static void Main()
-    {
-        SetConfigFlags(ConfigFlags.Msaa4xHint | ConfigFlags.ResizableWindow);
-        InitWindow(
-            800,
-            450,
-            "Signals Sample"
-        );
-
-        SetTargetFPS(9000);
-
-
-        Worlds.Initialize();
-
-        var world = Worlds.DefaultWorld;
-
-        Components.RegisterComponent(typeof(Position));
-        Components.RegisterComponent(typeof(Velocity));
-        Components.RegisterComponent(typeof(Transform2D));
-
-        PrefabLoading.LoadAllPrefabs(Assembly.GetExecutingAssembly());
-
-        // Prefabs.TryGetPrefab("TestPrefab", out var prefab);
-        //
-        // var ent = Prefabs.Instantiate(prefab, world.Index);
-        //
-        //
-        // var data = ent.Get<TestComponent>().Data;
-        // var velo = ent.Get<Velocity>().Value;
-        //
-        // Console.WriteLine(data);
-        // Console.WriteLine(velo);
-
-        // for (int i = 0; i < 50 ; i++) {
-        //     var entity = world.Create();
-        //     entity.Set(new Transform2D() { Position = new Vector2(Random.Shared.Next(0, 300), Random.Shared.Next(0, 300)) });
-        //     entity.Set(new Velocity() { Value = new Vector2(Random.Shared.Next(-5, 5), Random.Shared.Next(-5, 5)) });
-        // }
-        //
-        // var srcEntity = world.Create();
-        // srcEntity.Set(new Transform2D() { Position = new Vector2(Random.Shared.Next(0, 300), Random.Shared.Next(0, 300)) });
-        // srcEntity.Set(new Velocity() { Value = new Vector2(Random.Shared.Next(-5, 5), Random.Shared.Next(-5, 5)) });
-        //srcEntity.Set(new Controllable());
-
-        var controllerPrefab = Prefabs.GetPrefab("TestPrefab");
-        Prefabs.Create(controllerPrefab, Worlds.DefaultWorld.Index);
-
-        var moveDir = Vector2.Zero;
-
-        world.Set(new Controllable());
-
-        Console.Write(world.Has<Controllable>());
-
-        while (!WindowShouldClose())
-        {
-
-            var query = world.Query().With<Transform2D>().With<Velocity>().Iterate();
-            while (query.Next() is { } entity)
-            {
-                ref var pos = ref entity.Get<Transform2D>();
-                ref var vel = ref entity.Get<Velocity>();
-
-                pos.Position += vel.Value * GetFrameTime();
+        for (int i = 0; i < total_count; i++) {
+            var entity = world.Create();
+            entity.Set(new Position { X = i, Y = i });
+            
+            if (i % 2 == 0) {
+                entity.Set(new Velocity { X = 1.0f, Y = 1.0f });
             }
-
-            if (IsKeyPressed(KeyboardKey.W))
-            {
-                moveDir.Y -= 1;
-            }
-            if (IsKeyPressed(KeyboardKey.S))
-            {
-                moveDir.Y += 1;
-            }
-            if (IsKeyPressed(KeyboardKey.A))
-            {
-                moveDir.X -= 1;
-            }
-            if (IsKeyPressed(KeyboardKey.D))
-            {
-                moveDir.X += 1;
-            }
-
-            if (moveDir.LengthSquared() > 0)
-            {
-                moveDir = Vector2.Normalize(moveDir);
-            }
-
-            var playerQuery = world.Query().With<Controllable>().With<Velocity>().Iterate();
-            while (playerQuery.Next() is { } player)
-            {
-                ref var velocity = ref player.Get<Velocity>();
-
-                velocity.Value += moveDir * 111.0f * GetFrameTime();
-            }
-
-            #region drawing
-            BeginDrawing();
-            ClearBackground(Color.DarkGray);
-
-            var worldQuery = new WorldEntityQuery().With<Transform2D>().Iterate();
-
-            while (worldQuery.Next() is { } wld)
-            {
-                var entityquery = wld.Query().With<Transform2D>().Iterate();
-                while (entityquery.Next() is { } entity)
-                {
-                    ref var pos = ref entity.Get<Transform2D>();
-
-                    var color = Color.White;
-                    if (entity.Has<Controllable>())
-                    {
-                        color = Color.Red;
-                    }
-
-                    DrawRectangleV(pos.Position, new Vector2(10, 10), color);
-                }
-            }
-
-            DrawFPS(0, 0);
-
-            EndDrawing();
-            #endregion
         }
+        
+        Console.WriteLine($"spawned {total_count} entities in: {sw.ElapsedMilliseconds}ms\n");
 
-        CloseWindow();
+        sw.Restart();
+        int manualUpdates = 0;
+        for (uint i = 0; i < total_count; i++) {
+            if (world.Has<Position>(i) && world.Has<Velocity>(i)) {
+                ref var pos = ref world.Get<Position>(i);
+                ref var vel = ref world.Get<Velocity>(i);
+                pos.X += vel.X;
+                manualUpdates++;
+            }
+        }
+        Console.WriteLine($"manual iter loop ({manualUpdates} entities): {sw.Elapsed.TotalMilliseconds}ms");
+
+        sw.Restart();
+        var query = world.Query().With<Position>().With<Velocity>().Iterate();
+        
+        int updates = 0;
+        while (query.Next() is { } entity) {
+            ref var pos = ref entity.Get<Position>();
+            ref var vel = ref entity.Get<Velocity>();
+            pos.X += vel.X;
+            updates++;
+        }
+        
+        Console.WriteLine($"bitmask query loop  ({updates} entities): {sw.Elapsed.TotalMilliseconds}ms\n");
     }
 }

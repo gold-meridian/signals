@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Signals.V2;
 
@@ -64,5 +65,13 @@ public sealed class SparseSet<T> : ISparseSet where T : struct {
         int newSize = Math.Max(4, _dense.Length * 2);
         Array.Resize(ref _dense, newSize);
         Array.Resize(ref _denseToSparse, newSize);
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public unsafe ref T GetUnsafe(int entityId) {
+        fixed (int* sPtr = _sparse)
+        fixed (T* dPtr = _dense) {
+            return ref dPtr[sPtr[entityId]];
+        }
     }
 }
