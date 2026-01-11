@@ -29,16 +29,6 @@ public static class ComponentStore {
     public static Type GetType(int id) => idToType[id];
 }
 
-public readonly struct Sender<TSignal>(World world) where TSignal : struct {
-    private readonly World world = world;
-    /* public void Send(in T message) => world.Send(message); */
-}
-
-public readonly struct Reciever<TSignal>(World world) where TSignal : struct {
-    private readonly World world = world;
-    /* public void Read(in T message) => world.Read(message); */
-}
-
 public sealed class World : IDisposable {
     public static class Cache<T> where T : struct {
         public static readonly int Id = ComponentStore.GetId(typeof(T));

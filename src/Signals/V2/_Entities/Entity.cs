@@ -10,39 +10,36 @@ namespace Signals.V2;
 /// <remarks>
 ///     Entities are not containers, and they do not store components; they are indices
 ///     that point to component data stored in their parent <see cref="World"/>.
-/// <br/> <br/>
+/// <br/>
 ///     They use a <see href="https://floooh.github.io/2018/06/17/handles-vs-pointers.html">generational handle</see> pattern:
 ///     It stores an <see cref="Id">index</see> and a <see cref="Generation">generation</see>. If an entity is destroyed, and
 ///     its index is reused / recycled, the old handle will have a mismatched generation and will be considered invalid.
 /// </remarks>
 [StructLayout(LayoutKind.Explicit, Size = 8)]
-[DebuggerTypeProxy(typeof(EntityDebugView))]
+[DebuggerTypeProxy(typeof(DebugView))]
 [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
 public readonly struct Entity(uint id, ushort generation, ushort world) {
+    /// <summary>
+    ///     The raw index of this entity in its parent worlds storage. 
+    /// </summary>
+    [FieldOffset(0)] public readonly uint Id = id;
+    /// <summary>
+    ///     The version of this entity. Used to prevent stale entity handles.
+    /// </summary>
+    [FieldOffset(4)] public readonly ushort Generation = generation;
+    /// <summary>
+    ///     The parent world that owns and manages the data for this entity.
+    /// </summary>
+    [FieldOffset(6)] public readonly ushort WorldId = world;
+    
+    public World World => World.AllWorlds[WorldId];
+    
     /// <summary>
     ///     The size of the <see cref="Entity"/> struct in bytes.
     /// </summary>
     public static readonly int SIZE = GetSize();
 
     private static unsafe int GetSize() => sizeof(Entity);
-    
-    /// <summary>
-    ///     The raw index of this entity in its parent worlds storage. 
-    /// </summary>
-    [FieldOffset(0)]
-    public readonly uint Id = id;
-    /// <summary>
-    ///     The version of this entity. Used to prevent stale entity handles.
-    /// </summary>
-    [FieldOffset(4)]
-    public readonly ushort Generation = generation;
-    /// <summary>
-    ///     The parent world that owns and manages the data for this entity.
-    /// </summary>
-    [FieldOffset(6)]
-    public readonly ushort WorldId = world;
-    
-    public World World => World.AllWorlds[WorldId];
     
     /// <summary>
     ///     Checks if an entity is currently active in its world.
@@ -93,7 +90,7 @@ public readonly struct Entity(uint id, ushort generation, ushort world) {
         }
     }
 
-    internal sealed class EntityDebugView(Entity target) {
+    internal sealed class DebugView(Entity target) {
         public uint Id => target.Id;
         public ushort Generation => target.Generation;
         public bool IsAlive => target.IsAlive;
@@ -118,35 +115,5 @@ public readonly struct Entity(uint id, ushort generation, ushort world) {
                 return components;
             }
         }
-    }
-}
-
-public static class EntityExt {
-    extension(Entity entity) {
-        public EntityView<T1, T2> View<T1, T2>() where T1 : struct where T2 : struct {
-            return new(entity);
-        }
-    }
-}
-
-/// <summary>
-///     A view of an entity that lives on the stack, containing pre-cached component references.
-///     Reduces lookup cost by resolving all component storage locations once upon creation.
-/// </summary>
-public readonly ref struct EntityView<T1, T2> 
-    where T1 : struct 
-    where T2 : struct
-{
-    public readonly Entity Entity;
-    public readonly ref T1 Component1;
-    public readonly ref T2 Component2;
-
-    public EntityView(Entity entity) {
-        if (!entity.IsAlive) 
-            throw new InvalidOperationException("cannot create view for dead entity!");
-            
-        Entity = entity;
-        Component1 = ref entity.Get<T1>();
-        Component2 = ref entity.Get<T2>();
     }
 }
