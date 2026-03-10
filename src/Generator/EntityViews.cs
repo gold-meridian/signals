@@ -26,10 +26,10 @@ internal class EntityViews {
     
     [Generator]
     internal class Generator() : IIncrementalGenerator {
-        private const int MaxGenericCount = 16;
+        private const int max_count = 32;
         
         void IIncrementalGenerator.Initialize(IncrementalGeneratorInitializationContext context) {
-            var descriptors = Enumerable.Range(2, MaxGenericCount)
+            var descriptors = Enumerable.Range(2, max_count)
                 .Select(i => new Descriptor(i))
                 .ToImmutableArray();
 

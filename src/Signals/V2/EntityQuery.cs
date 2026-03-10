@@ -39,8 +39,8 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
             _req = q.RequiredMask;
             _ex = q.ExcludedMask;
             _presence = world.PresenceMask.Array ?? Array.Empty<Bitset256>();
-            _masksPtr = (Bitset256*)Unsafe.AsPointer(ref world._masks[0]);
-            _gensPtr = (ushort*)Unsafe.AsPointer(ref world._generations[0]);
+            _masksPtr = (Bitset256*)Unsafe.AsPointer(ref world.Masks[0]);
+            _gensPtr = (ushort*)Unsafe.AsPointer(ref world.Generations[0]);
             _chunkIdx = 0;
             _index = -1;
             if (_presence.Length > 0) _currentChunk = _presence[0];

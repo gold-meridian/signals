@@ -1,3 +1,11 @@
-﻿namespace Signals.V2;
+﻿using System.Runtime.CompilerServices;
 
-public static partial class EntityExt;
+namespace Signals.V2;
+
+public static partial class EntityExt {
+    extension(Entity entity) {
+        public EntityView<T1> View<T1>() where T1 : struct {
+            return new EntityView<T1>(entity);
+        }
+    }
+}

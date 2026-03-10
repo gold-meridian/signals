@@ -18,7 +18,7 @@ namespace Signals.V2;
 [StructLayout(LayoutKind.Explicit, Size = 8)]
 [DebuggerTypeProxy(typeof(DebugView))]
 [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
-public readonly struct Entity(uint id, ushort generation, ushort world) {
+public readonly unsafe struct Entity(uint id, ushort generation, ushort world) {
     /// <summary>
     ///     The raw index of this entity in its parent worlds storage. 
     /// </summary>
@@ -62,7 +62,11 @@ public readonly struct Entity(uint id, ushort generation, ushort world) {
     /// </summary>
     /// <typeparam name="T">The component.</typeparam>
     /// <param name="value">The data to give to the component.</param>
-    public void Set<T>(in T value) where T : struct => World.Set<T>(Id, value);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Entity Set<T>(in T value) where T : struct {
+        World.Set<T>(Id, value);
+        return this;
+    }
     
     /// <summary>
     ///     Checks whether the entity has a component of type <typeparamref name="T"/>.
@@ -102,7 +106,7 @@ public readonly struct Entity(uint id, ushort generation, ushort world) {
                 if (!target.IsAlive) return components;
 
                 var world = target.World;
-                var mask = world._masks[target.Id];
+                var mask = world.Masks[target.Id];
 
                 for (int i = 0; i < ComponentStore.Count; i++) {
                     if (mask.IsSet(i)) {
