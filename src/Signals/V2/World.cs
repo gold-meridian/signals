@@ -87,8 +87,16 @@ public sealed class World : IDisposable {
         return entity;
     }
 
-    public void Destroy(uint id, uint generation) {
+    public void Destroy(uint id, ushort generation) {
         if (!IsValid(id, generation)) return;
+        
+        foreach (int componentId in Masks[id]) {
+            if (componentId < componentStores.Length && componentStores[componentId] != null) {
+                componentStores[componentId]!.Remove((int)id);
+            }
+        }
+        Masks[id] = default;
+
         Generations[id]++;
         PresenceMask.Unset((int)id);
         freeIds.Push(id);
