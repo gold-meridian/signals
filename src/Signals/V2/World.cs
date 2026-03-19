@@ -1,10 +1,12 @@
 ﻿using Signals.Core;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Signals.V2;
 
+[DebuggerDisplay("ID: {Id}, Size: {Size}")]
 public readonly struct ComponentInfo {
     public readonly int Id;
     public readonly int Size;
