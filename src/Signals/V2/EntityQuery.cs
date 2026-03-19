@@ -10,13 +10,13 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
     public readonly Bitset256 ExcludedMask = ex;
 
     public EntityQuery With<T>() where T : struct {
-        var r = RequiredMask; r.Set(World.Cache<T>.Id);
+        var r = RequiredMask; r.Set(ComponentMeta<T>.Info.Id);
         return new EntityQuery(_world, r, ExcludedMask);
     }
 
     public EntityQuery Without<T>() where T : struct {
         var e = ExcludedMask; 
-        e.Set(World.Cache<T>.Id);
+        e.Set(ComponentMeta<T>.Info.Id);
         return new EntityQuery(_world, RequiredMask, e);
     }
     

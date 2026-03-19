@@ -76,6 +76,12 @@ public readonly unsafe struct Entity(uint id, ushort generation, ushort world) {
     public bool Has<T>() where T : struct => World.Has<T>(Id);
     
     /// <summary>
+    ///     Removes the component of type <typeparamref name="T"/> from this entity.
+    /// </summary>
+    /// <typeparam name="T">The component remove.</typeparam>
+    public void Remove<T>() where T : struct => World.Remove<T>(Id);
+    
+    /// <summary>
     ///     Removes the entity from the world and prepares its index for recycling.
     /// </summary>
     /// <remarks>

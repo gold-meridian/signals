@@ -1,36 +1,48 @@
 ﻿using System.Diagnostics;
 using System.Numerics;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using Signals.V2;
-using YamlDotNet.Core.Tokens;
 
 namespace Sample;
 
 struct Tag1;
+struct Tag2;
+struct TestComponent { public int Value; }
+
+public readonly ref struct ScopedStopwatch : IDisposable {
+    private readonly long start;
+    private readonly string label;
+
+    public ScopedStopwatch(string label) {
+        this.label = label;
+        start = Stopwatch.GetTimestamp();
+    }
+
+    public void Dispose() {
+        var elapsed = Stopwatch.GetElapsedTime(start);
+        Console.WriteLine($"[{label}] {elapsed.TotalMilliseconds:F3}ms");
+    }
+}
 
 unsafe class Program {
     static void Main() {
         using var world = new World();
-        var stopwatch = new Stopwatch();
+        var cmds = new Commands();
+        cmds.Fetch(world);
 
-        int count = 1000;
-        
-        stopwatch.Start();
-        for (int i = 0; i < count; i++) {
-            world.Create().Set(new Tag1());
-        }
-        stopwatch.Stop();
-        Console.WriteLine($"time to create {count}: {stopwatch.ElapsedMilliseconds} ms");
-        
-        stopwatch.Start();
-        var query1 = world.Query().With<Tag1>().Iterate();
+        const int entityCount = 1_000_000;
+        const int threadCount = 12;
 
-        while (query1.Next() is { } entity)
-        {
-            
+        Console.WriteLine($"spawning {entityCount:N0} entities on {threadCount} threads...");
+
+        using (new ScopedStopwatch("Recording")) {
+            Parallel.For(0, entityCount, new ParallelOptions { MaxDegreeOfParallelism = threadCount }, i => {
+                cmds.Spawn().Set(new TestComponent { Value = i });
+            });
         }
-        stopwatch.Stop();
-        Console.WriteLine($"time to iterate query: {stopwatch.ElapsedMilliseconds} ms");
+
+        using (new ScopedStopwatch("Apply")) {
+            cmds.Apply();
+        }
     }
 }
