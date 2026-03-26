@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Numerics;
 using System.Reflection;
-using Signals.V2;
+using Signals;
 
 namespace Sample;
 

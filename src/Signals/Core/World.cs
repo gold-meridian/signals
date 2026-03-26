@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
-namespace Signals.V2;
+namespace Signals;
 
 [DebuggerDisplay("ID: {Id}, Size: {Size}")]
 public readonly struct ComponentInfo {

@@ -1,7 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
-namespace Signals.V2;
+namespace Signals;
 
 internal interface IDeferredCommand {
     void Execute(World world, Commands commands);

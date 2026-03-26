@@ -1,7 +1,7 @@
 ﻿using System.Numerics;
 using System.Runtime.CompilerServices;
 
-namespace Signals.V2;
+namespace Signals;
 
 public interface ISparseSet {
     bool Has(int entityId);

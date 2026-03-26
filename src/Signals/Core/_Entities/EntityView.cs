@@ -1,4 +1,4 @@
-﻿namespace Signals.V2;
+﻿namespace Signals;
 
 /// <summary>
 ///     A view of an entity that lives on the stack, containing pre-cached component references.

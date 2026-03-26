@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Signals.V2;
+namespace Signals;
 
 /// <summary>
 ///     A lightweight versioned handle representing an entity within a <see cref="World"/>.

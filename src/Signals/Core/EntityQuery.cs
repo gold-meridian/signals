@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Signals.V2;
+namespace Signals;
 
 public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
     private readonly World _world = world;

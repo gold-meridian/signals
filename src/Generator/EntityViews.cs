@@ -37,7 +37,7 @@ internal class EntityViews {
                 using var writer = new IndentedStringWriter();
                 writer.WriteLine("using System;");
                 writer.WriteLine("");
-                writer.WriteLine("namespace Signals.V2;");
+                writer.WriteLine("namespace Signals;");
 
                 foreach (var desc in descriptors) {
                     desc.Document(writer);
@@ -59,7 +59,7 @@ internal class EntityViews {
 
             context.RegisterPostInitializationOutput(ctx => {
                 using var writer = new IndentedStringWriter();
-                writer.WriteLine("using Signals.V2; \n\n namespace Signals.V2; \n");
+                writer.WriteLine("using Signals; \n\n namespace Signals; \n");
 
                 using (writer.BeginScope($"public static partial class EntityExt")) {
                     using (writer.BeginScope($"extension(Entity entity)")) {

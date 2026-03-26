@@ -1,5 +1,5 @@
 ﻿using NUnit.Framework;
-using Signals.V2;
+using Signals;
 
 namespace Tests;
 

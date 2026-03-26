@@ -1,6 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 
-namespace Signals.V2;
+namespace Signals;
 
 public static partial class EntityExt {
     extension(Entity entity) {
