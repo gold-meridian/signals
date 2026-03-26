@@ -1,96 +1,22 @@
 ﻿using NUnit.Framework;
-using Signals.Core;
+using Signals.V2;
 
 namespace Tests;
 
-internal struct Apple : IComponent {
-    public int Data;
-}
-
-internal struct Orange : IComponent {
-    public int Data;
-}
-
 [TestFixture]
 public class ComponentTests {
-    [SetUp]
-    public void Setup() {
-        typeof(Worlds)
-            .GetField("_worlds", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-            ?.SetValue(null, new List<World>());
+    [Test]
+    public void Test_ComponentIdsAreUniquePerType() {
+        int id1 = ComponentStore.GetId<Struct1>();
+        int id2 = ComponentStore.GetId<Struct2>();
+        int id3 = ComponentStore.GetId<int>();
 
-        Entities.WorldData = Array.Empty<Entities.UniqueWorldData>();
-
-        Worlds.Initialize();
-
-        typeof(Components)
-            .GetField("_componentCount", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-            ?.SetValue(null, 0u);
-
-        typeof(Components)
-            .GetField("ComponentInfos", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
-            ?.SetValue(null, Array.Empty<Components.Info>());
+        Assert.That(id1, Is.Not.EqualTo(id2));
+        Assert.That(id1, Is.Not.EqualTo(id3));
     }
 
     [Test]
-    public void ComponentRegistrationAssignsUniqueHandles() {
-        var appleHandle = Components.GetComponentHandle<Apple>();
-        var orangeHandle = Components.GetComponentHandle<Orange>();
-
-        Assert.That(appleHandle.IsValid, Is.True);
-        Assert.That(orangeHandle.IsValid, Is.True);
-
-        Assert.That(appleHandle.Id, Is.Not.EqualTo(0));
-        Assert.That(orangeHandle.Id, Is.Not.EqualTo(0));
-
-        Assert.That(appleHandle.Id, Is.Not.EqualTo(orangeHandle.Id));
-
-        Assert.That(Components.ComponentMasksPerEntity, Is.GreaterThanOrEqualTo(1));
-    }
-
-    [Test]
-    public void EntityGetComponent() {
-        var entity = Entities.Create(Worlds.DefaultWorld.Index);
-
-        entity.Set(new Apple() with { Data = 10 });
-
-        var apple = entity.Get<Apple>();
-
-        Assert.That(apple.Data, Is.EqualTo(10));
-    }
-
-    [Test]
-    public void EntityHasComponent() {
-        var entity = Entities.Create(Worlds.DefaultWorld.Index);
-
-        entity.Set(new Apple() with { Data = 10 });
-
-        Assert.That(entity.Has<Apple>());
-    }
-
-    [Test]
-    public void EntitySetRemoveSetComponent() {
-        var entity = Entities.Create(Worlds.DefaultWorld.Index);
-
-        entity.Set(new Apple() with { Data = 10 });
-        entity.Remove<Apple>();
-        entity.Set(new Apple() with { Data = 5 });
-
-        var apple = entity.Get<Apple>();
-
-        Assert.That(apple.Data, Is.EqualTo(5));
-    }
-
-    [Test]
-    public void EntityDestroyRemovesComponents() {
-        var entity = Entities.Create(Worlds.DefaultWorld.Index);
-
-        entity.Set(new Apple() with { Data = 10 });
-        entity.Set(new Orange() with { });
-
-        entity.Destroy();
-
-        Assert.That(!entity.Has<Apple>());
-        Assert.That(!entity.Has<Orange>());
+    public void Test_ComponentGenericIdSame() {
+        Assert.That(ComponentStore.GetId<Struct1>(), Is.EqualTo(ComponentStore.GetId(typeof(Struct1))));
     }
 }

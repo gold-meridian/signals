@@ -1,0 +1,22 @@
+﻿namespace Tests;
+
+struct Struct1;
+struct Struct2;
+struct Struct3;
+struct Struct4;
+struct Struct5;
+struct Struct6;
+struct Struct7;
+struct Struct8;
+struct Struct9;
+struct Struct10;
+struct Struct11;
+struct Struct12;
+struct Struct13;
+struct Struct14;
+struct Struct15;
+struct Struct16;
+struct Struct17;
+struct Struct18;
+struct Struct19;
+struct Struct20;
