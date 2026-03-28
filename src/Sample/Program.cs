@@ -2,6 +2,7 @@
 using System.Numerics;
 using System.Reflection;
 using Signals;
+using Signals.Systems;
 
 namespace Sample;
 
@@ -12,37 +13,38 @@ struct TestComponent { public int Value; }
 unsafe class Program {
     static void Main() { 
         using var world = new World();
+
+        var app = new App(world);
+
+        app
+            .AddSystem(TestUpdate)
+            .InStage(stage: Stage.Update)
+            .Label("UpdateTest")
+            .Build();
+        
+        app
+            .AddSystem(TestUpdate2)
+            .InStage(stage: Stage.Update)
+            .Label("a")
+            .Before("UpdateTest")
+            .Build();
         
         var cmds = new Commands();
         cmds.Fetch(world);
         
         const int entityCount = 10_000;
-         
-        Parallel.For(0, 
-            entityCount, 
-            new ParallelOptions { MaxDegreeOfParallelism = Math.Max(Environment.ProcessorCount - 1, 1) }, 
-            i => {
-                     
-                cmds.Spawn()
-                    .Set(new TestComponent { Value = i })
-                    .Set(new Tag2());
-            });
         
-        cmds.Apply();
-
-        var query = world.Query()
-            .With<TestComponent>()
-            .Iterate();
-
-        int counter = 0;
-        
-        while (query.Next() is { } entity) {
-            ref var tc = ref entity.Get<TestComponent>();
-            counter++;
-        }
-        
-        Console.WriteLine($"entities found in query: {counter}");
+        app.Run();
         
         Console.WriteLine(world.PresenceMask.GetSetBits().Count());
+        
+    }
+
+    static void TestUpdate(Commands cmds) {
+        Console.WriteLine("fuh");
+    }
+    
+    static void TestUpdate2(Commands cmds) {
+        Console.WriteLine("fuh2");
     }
 }
