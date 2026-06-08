@@ -112,6 +112,7 @@ internal static class SystemRegistration
         foreach (var system in systems)
         {
             EmitExecutor(writer, system, entitySymbol, commandsSymbol);
+            writer.WriteLine();
         }
 
         ctx.AddSource("SignalsGeneratedSystems.g.cs", SourceText.From(writer.Builder.ToString(), Encoding.UTF8));
@@ -131,6 +132,7 @@ internal static class SystemRegistration
 
             var parameters = string.Join(", ", system.Parameters.Select(x => $"{GetParameterKey(x, identifier: false)} {x.Parameter.Name}"));
             writer.WriteLine($"internal delegate void {name}({parameters});");
+            writer.WriteLine();
         }
     }
 
