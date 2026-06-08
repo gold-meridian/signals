@@ -4,6 +4,14 @@ using System.Runtime.InteropServices;
 
 namespace Signals;
 
+/*
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class WithAttribute<T> : Attribute where T : struct;
+*/
+
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class WithoutAttribute<T> : Attribute where T : struct;
+
 public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
     private readonly World _world = world;
     public readonly Bitset256 RequiredMask = req;

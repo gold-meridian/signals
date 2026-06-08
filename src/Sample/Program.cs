@@ -40,11 +40,23 @@ unsafe class Program {
         
     }
 
+    [System]
     static void TestUpdate(Commands cmds) {
         Console.WriteLine("fuh");
     }
     
-    static void TestUpdate2(Commands cmds) {
+    [System]
+    static void TestUpdate2(ref Commands cmds) {
         Console.WriteLine("fuh2");
+    }
+    
+    [System]
+    static void TestUpdate3(Tag1 tag) {
+        Console.WriteLine("fuh3");
+    }
+    
+    [System]
+    static void TestUpdate4(Tag2 tag2, TestComponent component) {
+        Console.WriteLine("fuh4");
     }
 }
