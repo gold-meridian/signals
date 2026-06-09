@@ -94,28 +94,121 @@ internal static class SystemRegistration
             return;
         }
 
+        var queryIds = new Dictionary<string, int>();
         var systems = systemMethods.Select(x => CreateSystemDescriptor(withoutAttributeSymbol, x)).ToArray();
 
         using var writer = new IndentedStringWriter();
 
         writer.WriteLine("using System;");
+        writer.WriteLine("using System.Reflection;");
         writer.WriteLine("using Signals;");
+        writer.WriteLine("using Signals.Systems;");
         writer.WriteLine();
         writer.WriteLine("namespace Signals;");
         writer.WriteLine();
 
         EmitDelegates(writer, systems);
 
-        writer.WriteLine();
-        using (writer.BeginScope($"internal static class SystemRegistrationExtensions")) { }
-
+        var generated = new HashSet<string>();
         foreach (var system in systems)
         {
-            EmitExecutor(writer, system, entitySymbol, commandsSymbol);
+            EmitExecutor(writer, system, entitySymbol, commandsSymbol, generated);
             writer.WriteLine();
         }
 
+        // EmitBindings(writer, systemMethods, queryIds);
+
+        EmitRegistrationExtensions(writer, systems, queryIds);
+        writer.WriteLine();
+
         ctx.AddSource("SignalsGeneratedSystems.g.cs", SourceText.From(writer.Builder.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitRegistrationExtensions(
+        IndentedStringWriter writer,
+        SystemDescriptor[] systems,
+        Dictionary<string, int> queryIds
+    )
+    {
+        using (writer.BeginScope($"internal static class SystemRegistrationExtensions"))
+        {
+            var first = true;
+            foreach (var signatureGroup in systems.GroupBy(GetDelegateName))
+            {
+                if (!first)
+                {
+                    writer.WriteLine();
+                }
+                else
+                {
+                    first = false;
+                }
+
+                EmitAddSystemOverload(
+                    writer,
+                    signatureGroup.ToArray(),
+                    queryIds
+                );
+            }
+        }
+    }
+
+    private static void EmitAddSystemOverload(
+        IndentedStringWriter writer,
+        SystemDescriptor[] systems,
+        Dictionary<string, int> queryIds
+    )
+    {
+        var delegateName = GetDelegateName(systems[0]);
+
+        using (writer.BeginScope($"internal static SystemBuilder AddSystem(this App app, {delegateName} system)"))
+        {
+            writer.WriteLine("var binding = system.Method.GetCustomAttribute<GeneratedSystemBindingAttribute>();");
+            using (writer.BeginScope($"if (binding is null)"))
+            {
+                writer.WriteLine("throw new InvalidOperationException(\"Missing GeneratedSystemBindingAttribute.\");");
+            }
+
+            writer.WriteLine();
+
+            using (writer.BeginScope($"switch (binding.QueryId)"))
+            {
+                var handledIds = new HashSet<int>();
+
+                foreach (var system in systems)
+                {
+                    var queryId = GetQueryId(queryIds, system);
+                    if (!handledIds.Add(queryId))
+                    {
+                        continue;
+                    }
+
+                    writer.WriteLine($"case {queryId}:");
+                    writer.Indent++;
+                    writer.WriteLine($"return app.AddGeneratedSystem(system, {GetExecutorName(system)}.Execute);");
+                    writer.Indent--;
+                }
+
+                writer.WriteLine("default:");
+                writer.Indent++;
+                writer.WriteLine("throw new InvalidOperationException(\"Unknown generated query id.\");");
+                writer.Indent--;
+            }
+        }
+    }
+
+    private static int GetQueryId(Dictionary<string, int> queryIds, SystemDescriptor system)
+    {
+        var key = GetNameFromFullQuery(system);
+
+        if (queryIds.TryGetValue(key, out var id))
+        {
+            return id;
+        }
+
+        id = queryIds.Count;
+        queryIds.Add(key, id);
+        return id;
     }
 
     private static void EmitDelegates(IndentedStringWriter writer, SystemDescriptor[] systems)
@@ -136,9 +229,13 @@ internal static class SystemRegistration
         }
     }
 
-    private static void EmitExecutor(IndentedStringWriter writer, SystemDescriptor descriptor, INamedTypeSymbol entitySymbol, INamedTypeSymbol commandsSymbol)
+    private static void EmitExecutor(IndentedStringWriter writer, SystemDescriptor descriptor, INamedTypeSymbol entitySymbol, INamedTypeSymbol commandsSymbol, HashSet<string> generated)
     {
         var executorName = GetExecutorName(descriptor);
+        if (!generated.Add(executorName))
+        {
+            return;
+        }
 
         using (writer.BeginScope($"internal static class {executorName}"))
         {

@@ -59,4 +59,15 @@ unsafe class Program {
     static void TestUpdate4(Tag2 tag2, TestComponent component) {
         Console.WriteLine("fuh4");
     }
+    
+    [System]
+    static void TestUpdate5(Tag2 tag2, TestComponent component) {
+        Console.WriteLine("fuh4");
+    }
+    
+    [Without<Tag1>]
+    [System]
+    static void TestUpdate6(Tag2 tag2, TestComponent component) {
+        Console.WriteLine("fuh4");
+    }
 }
