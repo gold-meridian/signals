@@ -10,7 +10,7 @@ struct Tag1;
 struct Tag2;
 struct TestComponent { public int Value; }
 
-unsafe class Program {
+unsafe partial class Program {
     static void Main() { 
         using var world = new World();
 
@@ -41,33 +41,33 @@ unsafe class Program {
     }
 
     [System]
-    static void TestUpdate(Commands cmds) {
+    static partial void TestUpdate(Commands cmds) {
         Console.WriteLine("fuh");
     }
     
     [System]
-    static void TestUpdate2(ref Commands cmds) {
+    static partial void TestUpdate2(ref Commands cmds) {
         Console.WriteLine("fuh2");
     }
     
     [System]
-    static void TestUpdate3(Tag1 tag) {
+    static partial void TestUpdate3(Tag1 tag) {
         Console.WriteLine("fuh3");
     }
     
     [System]
-    static void TestUpdate4(Tag2 tag2, TestComponent component) {
+    static partial void TestUpdate4(Tag2 tag2, TestComponent component) {
         Console.WriteLine("fuh4");
     }
     
     [System]
-    static void TestUpdate5(Tag2 tag2, TestComponent component) {
+    static partial void TestUpdate5(Tag2 tag2, TestComponent component) {
         Console.WriteLine("fuh4");
     }
     
     [Without<Tag1>]
     [System]
-    static void TestUpdate6(Tag2 tag2, TestComponent component) {
+    static partial void TestUpdate6(Tag2 tag2, TestComponent component) {
         Console.WriteLine("fuh4");
     }
 }

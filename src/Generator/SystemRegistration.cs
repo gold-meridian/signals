@@ -104,22 +104,39 @@ internal static class SystemRegistration
         writer.WriteLine("using Signals;");
         writer.WriteLine("using Signals.Systems;");
         writer.WriteLine();
-        writer.WriteLine("namespace Signals;");
-        writer.WriteLine();
-
-        EmitDelegates(writer, systems);
-
-        var generated = new HashSet<string>();
-        foreach (var system in systems)
+        using (writer.BeginScope($"namespace Signals"))
         {
-            EmitExecutor(writer, system, entitySymbol, commandsSymbol, generated);
-            writer.WriteLine();
+            EmitDelegates(writer, systems);
+
+            var generated = new HashSet<string>();
+            foreach (var system in systems)
+            {
+                EmitExecutor(writer, system, entitySymbol, commandsSymbol, generated);
+                writer.WriteLine();
+            }
+
+            EmitRegistrationExtensions(writer, systems, queryIds);
         }
 
-        // EmitBindings(writer, systemMethods, queryIds);
-
-        EmitRegistrationExtensions(writer, systems, queryIds);
-        writer.WriteLine();
+        foreach (var system in systems)
+        {
+            writer.WriteLine();
+            EmitNamespace(
+                writer,
+                system.Method.ContainingType,
+                () =>
+                {
+                    EmitContainingTypes(
+                        writer,
+                        system.Method.ContainingType,
+                        () =>
+                        {
+                            EmitBindingMethod(writer, system, GetQueryId(queryIds, system));
+                        }
+                    );
+                }
+            );
+        }
 
         ctx.AddSource("SignalsGeneratedSystems.g.cs", SourceText.From(writer.Builder.ToString(), Encoding.UTF8));
     }
@@ -197,6 +214,106 @@ internal static class SystemRegistration
         }
     }
 
+    private static void EmitNamespace(IndentedStringWriter writer, INamedTypeSymbol type, Action action)
+    {
+        var ns = type.ContainingNamespace;
+
+        if (ns.IsGlobalNamespace)
+        {
+            action();
+        }
+        else
+        {
+            using (writer.BeginScope($"namespace {ns.ToDisplayString()}"))
+            {
+                action();
+            }
+        }
+    }
+
+    private static ImmutableArray<INamedTypeSymbol> GetContainingTypes(INamedTypeSymbol type)
+    {
+        var builder = ImmutableArray.CreateBuilder<INamedTypeSymbol>();
+
+        while (type is not null)
+        {
+            builder.Add(type);
+            type = type.ContainingType;
+        }
+
+        builder.Reverse();
+        return builder.ToImmutable();
+    }
+
+    private static string GetAccessibility(Accessibility accessibility)
+    {
+        return accessibility switch
+        {
+            Accessibility.Public => "public",
+            Accessibility.Internal => "internal",
+            Accessibility.Private => "private",
+            Accessibility.Protected => "protected",
+            Accessibility.ProtectedAndInternal => "private protected",
+            Accessibility.ProtectedOrInternal => "protected internal",
+            _ => "",
+        };
+    }
+
+    private static string GetTypeDeclaration(INamedTypeSymbol type)
+    {
+        // var accessibility = GetAccessibility(type.DeclaredAccessibility);
+
+        var kind = type.TypeKind switch
+        {
+            TypeKind.Class => "class",
+            TypeKind.Struct => "struct",
+            TypeKind.Interface => "interface",
+            _ => "class",
+        };
+
+        if (type.IsRecord)
+        {
+            kind = "record " + kind;
+        }
+
+        var generics = type.TypeParameters.Length == 0
+            ? ""
+            : "<" + string.Join(", ", type.TypeParameters.Select(x => x.Name)) + ">";
+
+        // return $"{accessibility} partial {kind} {type.Name}{generics}";
+        return $"partial {kind} {type.Name}{generics}";
+    }
+
+    private static void EmitContainingTypes(IndentedStringWriter writer, INamedTypeSymbol type, Action action)
+    {
+        var scopes = new List<IndentedStringWriter.Scope>();
+
+        foreach (var containingType in GetContainingTypes(type))
+        {
+            scopes.Add(writer.BeginScope($"{GetTypeDeclaration(containingType)}"));
+        }
+
+        action();
+
+        foreach (var scope in scopes.AsEnumerable().Reverse())
+        {
+            scope.Dispose();
+        }
+    }
+
+    private static string GetParameterDeclaration(IParameterSymbol parameter)
+    {
+        var modifier = parameter.RefKind switch
+        {
+            RefKind.Ref => "ref ",
+            RefKind.In => "in ",
+            RefKind.Out => "out ",
+            _ => "",
+        };
+
+        return $"{modifier}{parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)} {parameter.Name}";
+    }
+
     private static int GetQueryId(Dictionary<string, int> queryIds, SystemDescriptor system)
     {
         var key = GetNameFromFullQuery(system);
@@ -209,6 +326,21 @@ internal static class SystemRegistration
         id = queryIds.Count;
         queryIds.Add(key, id);
         return id;
+    }
+
+    private static void EmitBindingMethod(IndentedStringWriter writer, SystemDescriptor system, int queryId)
+    {
+        var method = system.Method;
+        var staticText = method.IsStatic ? "static " : "";
+
+        writer.WriteLine($"[GeneratedSystemBinding({queryId})]");
+
+        var returnType = method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        // var accessibility = GetAccessibility(method.DeclaredAccessibility);
+        var parameters = string.Join(", ", method.Parameters.Select(GetParameterDeclaration));
+
+        // writer.WriteLine($"{accessibility} partial {returnType} {method.Name}({parameters});");
+        writer.WriteLine($"{staticText}partial {returnType} {method.Name}({parameters});");
     }
 
     private static void EmitDelegates(IndentedStringWriter writer, SystemDescriptor[] systems)
