@@ -12,6 +12,8 @@ namespace Signals.Systems;
 
 public delegate void SystemDelegate(World world);
 
+public delegate void SystemExecutor(Delegate system, World world, Commands commands);
+
 public ref struct SystemBuilder {
     private readonly App _app;
     private readonly SystemFunction _system;
@@ -20,9 +22,9 @@ public ref struct SystemBuilder {
     private List<string> _after = new();
     private List<string> _before = new();
 
-    public SystemBuilder(App app, Delegate systemFn) {
+    public SystemBuilder(App app, Delegate systemFn, SystemExecutor? executor = null) {
         _app = app;
-        _system = new SystemFunction(systemFn);
+        _system = new SystemFunction(systemFn, executor);
     }
 
     public SystemBuilder InStage(Stage stage) {
@@ -58,25 +60,34 @@ public ref struct SystemBuilder {
 
 public struct SystemFunction {
     private readonly Delegate _delegate;
-    private readonly ParameterInfo[] _parameters;
+    private SystemExecutor _executor;
 
-    public SystemFunction(Delegate del) {
+    public SystemFunction(Delegate del, SystemExecutor? executor = null) {
         _delegate = del;
-        _parameters = del.Method.GetParameters();
+        _executor = executor ?? MakeDynamicExecutor(del);
     }
 
     public void Execute(World world, Commands commands) {
-        var args = new object[_parameters.Length];
-        
-        for (int i = 0; i < _parameters.Length; i++) {
-            var paramType = _parameters[i].ParameterType;
-            
-            if (paramType == typeof(World)) args[i] = world;
-            else if (paramType == typeof(Commands)) args[i] = commands;
-            else throw new ArgumentException($"unsupported parameter type: {paramType.Name}");
-        }
+        _executor(_delegate, world, commands);
+    }
 
-        _delegate.DynamicInvoke(args);
+    private static SystemExecutor MakeDynamicExecutor(Delegate del) {
+        var parameters = del.Method.GetParameters();
+
+        return (system, world, commands) =>
+        {
+            var args = new object[parameters.Length];
+        
+            for (int i = 0; i < parameters.Length; i++) {
+                var paramType = parameters[i].ParameterType;
+            
+                if (paramType == typeof(World)) args[i] = world;
+                else if (paramType == typeof(Commands)) args[i] = commands;
+                else throw new ArgumentException($"unsupported parameter type: {paramType.Name}");
+            }
+
+            system.DynamicInvoke(args);
+        };
     }
 }
 
@@ -97,6 +108,9 @@ public class App {
 
     public SystemBuilder AddSystem(Delegate systemFn) 
         => new SystemBuilder(this, systemFn);
+
+    public SystemBuilder AddGeneratedSystem(Delegate systemFn, SystemExecutor executor)
+        => new SystemBuilder(this, systemFn, executor);
 
     internal void RegisterSystem(SystemMetadata metadata) {
         if (metadata.Label != null) 
