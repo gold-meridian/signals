@@ -106,8 +106,10 @@ public class App {
 
     public App(World world) => _world = world;
 
+    /*
     public SystemBuilder AddSystem(Delegate systemFn) 
         => new SystemBuilder(this, systemFn);
+    */
 
     public SystemBuilder AddGeneratedSystem(Delegate systemFn, SystemExecutor executor)
         => new SystemBuilder(this, systemFn, executor);
