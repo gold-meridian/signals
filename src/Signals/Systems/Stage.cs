@@ -11,6 +11,7 @@ public readonly struct Stage(int id, string name) : IEquatable<Stage> {
         return new Stage(id, name);
     }
 
+    public static readonly Stage Initialization = Create("Initialization");
     public static readonly Stage Update = Create("Update");
 
     public bool Equals(Stage other) => Id == other.Id;

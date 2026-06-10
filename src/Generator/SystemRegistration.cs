@@ -369,35 +369,23 @@ internal static class SystemRegistration
             return;
         }
 
+        var needsEntityIteration = descriptor.Parameters.Any(p =>
+        {
+            var type = p.Parameter.Type;
+            if (SymbolEqualityComparer.Default.Equals(type, entitySymbol)) 
+                return true;
+            if (SymbolEqualityComparer.Default.Equals(type, commandsSymbol))
+                return false;
+            return true;
+        });
+
         using (writer.BeginScope($"internal static class {executorName}"))
         {
             using (writer.BeginScope($"public static void Execute(Delegate system, World world, Commands commands)"))
             {
                 writer.WriteLine($"var typed = ({GetDelegateName(descriptor)})system;");
 
-                writer.WriteLine("var query = world.Query()");
-
-                foreach (var parameter in descriptor.Parameters)
-                {
-                    var type = parameter.Parameter.Type;
-
-                    if (type.Name is "Entity" or "Commands")
-                    {
-                        continue;
-                    }
-
-                    writer.WriteLine($"    .With<{GetTypeKey(type, false)}>()");
-                }
-
-                foreach (var without in descriptor.Without)
-                {
-                    writer.WriteLine($"    .Without<{GetTypeKey(without, false)}>()");
-                }
-
-                writer.WriteLine("    .Iterate();");
-                writer.WriteLine();
-
-                using (writer.BeginScope($"while (query.Next() is {{ }} entity)"))
+                if (!needsEntityIteration)
                 {
                     writer.Write("typed(");
 
@@ -409,8 +397,6 @@ internal static class SystemRegistration
                         }
 
                         var parameter = descriptor.Parameters[i];
-                        var type = parameter.Parameter.Type;
-
                         var prefix = parameter.RefKind switch
                         {
                             RefKind.Ref => "ref ",
@@ -418,22 +404,73 @@ internal static class SystemRegistration
                             _ => "",
                         };
 
-                        if (SymbolEqualityComparer.Default.Equals(type, entitySymbol))
-                        {
-                            writer.Write(prefix + "entity");
-                            continue;
-                        }
-
-                        if (SymbolEqualityComparer.Default.Equals(type, commandsSymbol))
-                        {
-                            writer.Write(prefix + "commands");
-                            continue;
-                        }
-
-                        writer.Write(prefix + $"entity.Get<{GetTypeKey(type, false)}>()");
+                        writer.Write(prefix + "commands");
                     }
 
                     writer.WriteLine(");");
+                }
+                else
+                {
+                    writer.WriteLine("var query = world.Query()");
+
+                    foreach (var parameter in descriptor.Parameters)
+                    {
+                        var type = parameter.Parameter.Type;
+
+                        if (type.Name is "Entity" or "Commands")
+                        {
+                            continue;
+                        }
+
+                        writer.WriteLine($"    .With<{GetTypeKey(type, false)}>()");
+                    }
+
+                    foreach (var without in descriptor.Without)
+                    {
+                        writer.WriteLine($"    .Without<{GetTypeKey(without, false)}>()");
+                    }
+
+                    writer.WriteLine("    .Iterate();");
+                    writer.WriteLine();
+
+                    using (writer.BeginScope($"while (query.Next() is {{ }} entity)"))
+                    {
+                        writer.Write("typed(");
+
+                        for (var i = 0; i < descriptor.Parameters.Length; i++)
+                        {
+                            if (i != 0)
+                            {
+                                writer.Write(", ");
+                            }
+
+                            var parameter = descriptor.Parameters[i];
+                            var type = parameter.Parameter.Type;
+
+                            var prefix = parameter.RefKind switch
+                            {
+                                RefKind.Ref => "ref ",
+                                RefKind.In => "in ",
+                                _ => "",
+                            };
+
+                            if (SymbolEqualityComparer.Default.Equals(type, entitySymbol))
+                            {
+                                writer.Write(prefix + "entity");
+                                continue;
+                            }
+
+                            if (SymbolEqualityComparer.Default.Equals(type, commandsSymbol))
+                            {
+                                writer.Write(prefix + "commands");
+                                continue;
+                            }
+
+                            writer.Write(prefix + $"entity.Get<{GetTypeKey(type, false)}>()");
+                        }
+
+                        writer.WriteLine(");");
+                    }
                 }
             }
         }

@@ -69,8 +69,8 @@ public sealed class IndentedStringWriter : IDisposable {
     public void EndScope() {
         Indent--;
         WriteLine("}");
-
     }
+    
     public void EndScope([InterpolatedStringHandlerArgument("")] ref IndentedStringWriterInterpolationHandler handler) => EndScope();
     
     public void Dispose() { }

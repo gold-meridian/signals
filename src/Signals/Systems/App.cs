@@ -5,7 +5,6 @@ namespace Signals.Systems;
 /*
  todo,
     - better name for app? 
-    - automatic parameter resolving (currently hardcoded to just World and Commands, and uses DynamicInvoke
     - observer pattern for watching entity creations / component removals, etc
     - messages / signals
  */
@@ -48,7 +47,7 @@ public ref struct SystemBuilder {
     }
 
     public void Build() {
-        _app.RegisterSystem(new SystemMetadata {
+        _app.RegisterSystem(new SystemDescription {
             Function = _system,
             Stage = _stage,
             Label = _label,
@@ -58,7 +57,7 @@ public ref struct SystemBuilder {
     }
 }
 
-public struct SystemFunction {
+internal struct SystemFunction {
     private readonly Delegate _delegate;
     private SystemExecutor _executor;
 
@@ -74,8 +73,7 @@ public struct SystemFunction {
     private static SystemExecutor MakeDynamicExecutor(Delegate del) {
         var parameters = del.Method.GetParameters();
 
-        return (system, world, commands) =>
-        {
+        return (system, world, commands) => {
             var args = new object[parameters.Length];
         
             for (int i = 0; i < parameters.Length; i++) {
@@ -91,7 +89,7 @@ public struct SystemFunction {
     }
 }
 
-public struct SystemMetadata() {
+internal struct SystemDescription() {
     public SystemFunction Function;
     public Stage Stage;
     public string? Label;
@@ -99,10 +97,10 @@ public struct SystemMetadata() {
     public List<string> RunBefore;
 }
 
-public class App {
+public sealed class App {
     private readonly World _world;
-    private readonly Dictionary<Stage, List<SystemMetadata>> _stages = new();
-    private readonly Dictionary<string, SystemMetadata> _labeledSystems = new();
+    private readonly Dictionary<Stage, List<SystemDescription>> _stages = new();
+    private readonly Dictionary<string, SystemDescription> _labeledSystems = new();
 
     public App(World world) => _world = world;
 
@@ -114,14 +112,14 @@ public class App {
     public SystemBuilder AddGeneratedSystem(Delegate systemFn, SystemExecutor executor)
         => new SystemBuilder(this, systemFn, executor);
 
-    internal void RegisterSystem(SystemMetadata metadata) {
-        if (metadata.Label != null) 
-            _labeledSystems[metadata.Label] = metadata;
+    internal void RegisterSystem(SystemDescription description) {
+        if (description.Label != null) 
+            _labeledSystems[description.Label] = description;
 
-        if (!_stages.ContainsKey(metadata.Stage))
-            _stages[metadata.Stage] = new();
+        if (!_stages.ContainsKey(description.Stage))
+            _stages[description.Stage] = new();
 
-        _stages[metadata.Stage].Add(metadata);
+        _stages[description.Stage].Add(description);
     }
 
     public void Run() {
@@ -138,9 +136,9 @@ public class App {
         }
     }
 
-    private List<SystemMetadata> Sort(List<SystemMetadata> systems) {
+    private List<SystemDescription> Sort(List<SystemDescription> systems) {
         int systemCount = systems.Count;
-        var result = new List<SystemMetadata>();
+        var result = new List<SystemDescription>();
         var systemStates = new byte[systemCount];
         var systemIndexMap = new Dictionary<string, int>();
 
@@ -186,8 +184,7 @@ public class App {
             var system = systems[index];
 
             foreach (var afterLabel in system.RunAfter) {
-                if (systemIndexMap.TryGetValue(afterLabel, 
-                        out int depIndex)) {
+                if (systemIndexMap.TryGetValue(afterLabel, out int depIndex)) {
                     recursiveVisit(depIndex);
                 }
             }
