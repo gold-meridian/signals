@@ -1,12 +1,15 @@
-﻿using System.Reflection;
+﻿using System.Numerics;
+using System.Reflection;
 
 namespace Signals.Systems;
 
 /*
+ 
  todo,
     - better name for app? 
     - observer pattern for watching entity creations / component removals, etc
     - messages / signals
+
  */
 
 public delegate void SystemDelegate(World world);
@@ -14,60 +17,83 @@ public delegate void SystemDelegate(World world);
 public delegate void SystemExecutor(Delegate system, World world, Commands commands);
 
 public ref struct SystemBuilder {
-    private readonly App _app;
-    private readonly SystemFunction _system;
-    private Stage _stage = Stage.Update;
-    private string? _label;
-    private List<string> _after = new();
-    private List<string> _before = new();
+    private readonly App app;
+    private readonly SystemFunction system;
+    private Stage stage = Stage.Update;
+    private readonly List<Tag> tags = new();
+    private readonly List<Tag> requiredTags = new();
+    private readonly List<string> after = new();
+    private readonly List<string> before = new();
 
     public SystemBuilder(App app, Delegate systemFn, SystemExecutor? executor = null) {
-        _app = app;
-        _system = new SystemFunction(systemFn, executor);
+        this.app = app;
+        system = new SystemFunction(systemFn, executor);
     }
 
     public SystemBuilder InStage(Stage stage) {
-        _stage = stage;
+        this.stage = stage;
         return this;
     }
 
-    public SystemBuilder Label(string label) {
-        _label = label;
+    public SystemBuilder WithTag(string tagName) {
+        tags.Add(Tags.GetOrCreate(tagName));
+        return this;
+    }
+
+    public SystemBuilder WithTags(ReadOnlySpan<string> tagNames) {
+        foreach (var name in tagNames)
+            tags.Add(Tags.GetOrCreate(name));
+        return this;
+    }
+
+    public SystemBuilder RequireTag(string tagName) {
+        requiredTags.Add(Tags.GetOrCreate(tagName));
+        return this;
+    }
+
+    public SystemBuilder RequireTags(ReadOnlySpan<string> tagNames) {
+        foreach (var name in tagNames)
+            requiredTags.Add(Tags.GetOrCreate(name));
         return this;
     }
 
     public SystemBuilder After(params string[] labels) {
-        _after.AddRange(labels);
+        after.AddRange(labels);
         return this;
     }
 
     public SystemBuilder Before(params string[] labels) {
-        _before.AddRange(labels);
+        before.AddRange(labels);
         return this;
     }
 
     public void Build() {
-        _app.RegisterSystem(new SystemDescription {
-            Function = _system,
-            Stage = _stage,
-            Label = _label,
-            RunAfter = _after,
-            RunBefore = _before
-        });
+        var description = new SystemDescription() {
+            Function = system,
+            Stage = stage,
+            Tags = tags,
+            RequiredTags = requiredTags,
+            RunAfter = after,
+            RunBefore = before
+        };
+        
+        app.RegisterSystem(description, system.Method);
     }
 }
 
-internal struct SystemFunction {
-    private readonly Delegate _delegate;
-    private SystemExecutor _executor;
+public struct SystemFunction {
+    private readonly Delegate systemDelegate;
+    private SystemExecutor executor;
+    
+    public System.Reflection.MethodInfo Method => systemDelegate.Method;
 
     public SystemFunction(Delegate del, SystemExecutor? executor = null) {
-        _delegate = del;
-        _executor = executor ?? MakeDynamicExecutor(del);
+        systemDelegate = del;
+        this.executor = executor ?? MakeDynamicExecutor(del);
     }
 
     public void Execute(World world, Commands commands) {
-        _executor(_delegate, world, commands);
+        executor(systemDelegate, world, commands);
     }
 
     private static SystemExecutor MakeDynamicExecutor(Delegate del) {
@@ -89,72 +115,78 @@ internal struct SystemFunction {
     }
 }
 
-internal struct SystemDescription() {
+
+public struct SystemDescription {
+    public SystemHandle Handle;
     public SystemFunction Function;
     public Stage Stage;
-    public string? Label;
+    public List<Tag> Tags;
+    public List<Tag> RequiredTags;
     public List<string> RunAfter;
     public List<string> RunBefore;
 }
 
 public sealed class App {
-    private readonly World _world;
-    private readonly Dictionary<Stage, List<SystemDescription>> _stages = new();
-    private readonly Dictionary<string, SystemDescription> _labeledSystems = new();
+    private readonly World world;
+    private readonly Dictionary<Stage, List<SystemDescription>> stages = new();
+    private readonly Dictionary<string, SystemHandle> systemsByLabel = new();
+    private SystemDescription[] systemsById = new SystemDescription[64];
+    private Dictionary<MethodInfo, SystemHandle> systemsByMethod = new();
+    private uint systemCount = 0;
 
-    public App(World world) => _world = world;
+    public App(World world) => this.world = world;
 
-    /*
-    public SystemBuilder AddSystem(Delegate systemFn) 
-        => new SystemBuilder(this, systemFn);
-    */
+    public SystemBuilder AddGeneratedSystem(Delegate systemFn, SystemExecutor executor) => new SystemBuilder(this, systemFn, executor);
 
-    public SystemBuilder AddGeneratedSystem(Delegate systemFn, SystemExecutor executor)
-        => new SystemBuilder(this, systemFn, executor);
+    internal void RegisterSystem(SystemDescription description, System.Reflection.MethodInfo method) {
+        SystemStorage.Register(ref description, method);
+    
+        var handle = description.Handle;
+    
+        foreach (var tag in description.Tags)
+            Tags.AddSystem(tag, handle);
 
-    internal void RegisterSystem(SystemDescription description) {
-        if (description.Label != null) 
-            _labeledSystems[description.Label] = description;
+        if (!stages.ContainsKey(description.Stage))
+            stages[description.Stage] = new();
 
-        if (!_stages.ContainsKey(description.Stage))
-            _stages[description.Stage] = new();
-
-        _stages[description.Stage].Add(description);
+        stages[description.Stage].Add(description);
     }
 
     public void Run() {
         var commands = new Commands();
-        commands.Fetch(_world);
+        commands.Fetch(world);
 
-        foreach (var (stage, systems) in _stages.OrderBy(kvp => kvp.Key.Id)) {
+        foreach (var (stage, systems) in stages.OrderBy(kvp => kvp.Key.Id)) {
             var ordered = Sort(systems);
-            
+
             foreach (var system in ordered) {
-                system.Function.Execute(_world, commands);
+                system.Function.Execute(world, commands);
                 commands.Apply();
             }
         }
     }
 
     private List<SystemDescription> Sort(List<SystemDescription> systems) {
-        int systemCount = systems.Count;
-        var result = new List<SystemDescription>();
-        var systemStates = new byte[systemCount];
-        var systemIndexMap = new Dictionary<string, int>();
+        int count = systems.Count;
+        var result = new List<SystemDescription>(count);
+        var states = new byte[count];
+        var indexMap = new Dictionary<string, int>();
+        var handleToIndex = new Dictionary<string, int>();
 
-        for (int i = 0; i < systemCount; i++) {
-            if (systems[i].Label != null) {
-                systemIndexMap[systems[i].Label] = i;
+        for (int i = 0; i < count; i++) {
+            handleToIndex[systems[i].Handle.ToString()] = i;
+            foreach (var tag in systems[i].Tags) {
+                var tagName = Tags.GetName(tag);
+                indexMap[tagName] = i;
             }
         }
 
         foreach (var system in systems) {
             foreach (var beforeLabel in system.RunBefore) {
-                if (systemIndexMap.TryGetValue(beforeLabel, out int targetIndex)) {
-                    if (!systems[targetIndex].RunAfter.Contains(system.Label!)) {
-                        systems[targetIndex].RunAfter.Add(system.Label!);
-                    }
-                    
+                if (indexMap.TryGetValue(beforeLabel, out int targetIdx)) {
+                    var key = system.Handle.ToString();
+                    if (!systems[targetIdx].RunAfter.Contains(key))
+                        systems[targetIdx].RunAfter.Add(key);
                 }
             }
         }
@@ -162,31 +194,27 @@ public sealed class App {
         const byte bit_visited = 0b_10000000;
         const byte bit_sortable = 0b_01000000;
 
-        for (int i = 0; i < systemCount; i++) {
-            systemStates[i] = bit_sortable;
-        }
+        for (int i = 0; i < count; i++)
+            states[i] = bit_sortable;
 
-        for (int i = 0; i < systemCount; i++) {
+        for (int i = 0; i < count; i++)
             recursiveVisit(i);
-        }
 
         return result;
-        
-        void recursiveVisit(int index) {
-            ref var state = ref systemStates[index];
 
-            if ((state & bit_visited) != 0) {
+        void recursiveVisit(int index) {
+            ref var state = ref states[index];
+
+            if ((state & bit_visited) != 0)
                 return;
-            }
 
             state |= bit_visited;
 
             var system = systems[index];
 
             foreach (var afterLabel in system.RunAfter) {
-                if (systemIndexMap.TryGetValue(afterLabel, out int depIndex)) {
-                    recursiveVisit(depIndex);
-                }
+                if (handleToIndex.TryGetValue(afterLabel, out int depIdx))
+                    recursiveVisit(depIdx);
             }
 
             if ((state & bit_sortable) != 0) {

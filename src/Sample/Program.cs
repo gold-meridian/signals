@@ -19,25 +19,23 @@ unsafe partial class Program {
         using var world = new World();
 
         var app = new App(world);
-
-        app
-            .AddSystem(SpawnSomeEntities)
-            .InStage(stage: Stage.Initialization)
-            .Label("InitTest")
-            .Build();
         
         app
-            .AddSystem(TestUpdate)
+            .AddSystem(TestUpdate2)
             .InStage(stage: Stage.Update)
-            .Label("UpdateTest")
+            .WithTag("UpdateTest")
             .Build();
         
-        var cmds = new Commands();
-        cmds.Fetch(world);
+        app
+            .AddSystem(TestUpdate3)
+            .InStage(stage: Stage.Update)
+            .WithTag("UpdateTest2")
+            .Before("UpdateTest")
+            .Build();
         
         app.Run();
         
-        Console.WriteLine(entityCount);
+        Console.WriteLine($"found {entityCount} matching entities");
     }
 
     [System]
@@ -56,5 +54,15 @@ unsafe partial class Program {
     [System, Without<Tag2>]
     static partial void TestUpdate(Entity entity, Tag1 tagComponent) {
         entityCount++;
+    }
+    
+    [System, Without<Tag2>]
+    static partial void TestUpdate2(Commands cmds) {
+        Console.WriteLine("asd2");
+    }
+    
+    [System, Without<Tag2>]
+    static partial void TestUpdate3(Commands cmds) {
+        Console.WriteLine("asd3");
     }
 }
