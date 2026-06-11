@@ -3,6 +3,10 @@ using System.Reflection;
 
 namespace Signals.Systems;
 
+/// <summary>
+///     A unique handle assigned to a registered system,
+///     providing providing access to its description.
+/// </summary>
 public readonly struct SystemHandle(uint id) {
     public readonly uint Id = id;
     public bool IsValid => Id != 0;

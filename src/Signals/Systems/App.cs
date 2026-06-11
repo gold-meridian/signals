@@ -12,10 +12,17 @@ namespace Signals.Systems;
 
  */
 
-public delegate void SystemDelegate(World world);
-
+/// <summary>
+///     A delegate signature for executing a system.
+/// </summary>
 public delegate void SystemExecutor(Delegate system, World world, Commands commands);
 
+/// <summary>
+///     A builder for configuring, and registering systems with a fluent syntax api.
+/// <remarks>
+///     This is the main api for system registration.
+/// </remarks>
+/// </summary>
 public ref struct SystemBuilder {
     private readonly App app;
     private readonly SystemFunction system;
@@ -116,12 +123,13 @@ public struct SystemFunction {
 }
 
 
-public struct SystemDescription {
+public struct SystemDescription() {
     public SystemHandle Handle;
     public SystemFunction Function;
     public Stage Stage;
     public List<Tag> Tags;
     public List<Tag> RequiredTags;
+    
     public List<string> RunAfter;
     public List<string> RunBefore;
 }
@@ -138,7 +146,7 @@ public sealed class App {
 
     public SystemBuilder AddGeneratedSystem(Delegate systemFn, SystemExecutor executor) => new SystemBuilder(this, systemFn, executor);
 
-    internal void RegisterSystem(SystemDescription description, System.Reflection.MethodInfo method) {
+    internal void RegisterSystem(SystemDescription description, MethodInfo method) {
         SystemStorage.Register(ref description, method);
     
         var handle = description.Handle;
