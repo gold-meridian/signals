@@ -178,7 +178,7 @@ internal static class SystemRegistration
     {
         var delegateName = GetDelegateName(systems[0]);
 
-        using (writer.BeginScope($"internal static SystemBuilder AddSystem(this App app, {delegateName} system)"))
+        using (writer.BeginScope($"internal static SystemConfigurator AddSystem(this App app, {delegateName} system)"))
         {
             writer.WriteLine("var binding = system.Method.GetCustomAttribute<GeneratedSystemBindingAttribute>();");
             using (writer.BeginScope($"if (binding is null)"))
