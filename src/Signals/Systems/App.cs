@@ -23,18 +23,20 @@ public delegate void SystemExecutor(Delegate system, World world, Commands comma
 ///     This is the main api for system registration.
 /// </remarks>
 /// </summary>
-public ref struct SystemBuilder {
-    private readonly App app;
-    private readonly SystemFunction system;
+public ref struct SystemBuilder(App app, Delegate systemFn, SystemExecutor? executor = null) {
+    private readonly App app = app;
+    private readonly SystemFunction system = new SystemFunction(systemFn, executor);
     private Stage stage = Stage.Update;
     private readonly List<Tag> tags = new();
     private readonly List<Tag> requiredTags = new();
     private readonly List<string> after = new();
     private readonly List<string> before = new();
 
-    public SystemBuilder(App app, Delegate systemFn, SystemExecutor? executor = null) {
-        this.app = app;
-        system = new SystemFunction(systemFn, executor);
+    private Func<World, bool> condition;
+    
+    public SystemBuilder When(Func<World, bool> condition) {
+        this.condition = condition;
+        return this;
     }
 
     public SystemBuilder InStage(Stage stage) {
@@ -81,7 +83,8 @@ public ref struct SystemBuilder {
             Tags = tags,
             RequiredTags = requiredTags,
             RunAfter = after,
-            RunBefore = before
+            RunBefore = before,
+            RunCondition = condition
         };
         
         app.RegisterSystem(description, system.Method);
@@ -132,6 +135,8 @@ public struct SystemDescription() {
     
     public List<string> RunAfter;
     public List<string> RunBefore;
+
+    public Func<World, bool> RunCondition;
 }
 
 public sealed class App {
@@ -168,6 +173,9 @@ public sealed class App {
             var ordered = Sort(systems);
 
             foreach (var system in ordered) {
+                if (system.RunCondition != null && !system.RunCondition(world))
+                    continue;
+                
                 system.Function.Execute(world, commands);
                 commands.Apply();
             }
