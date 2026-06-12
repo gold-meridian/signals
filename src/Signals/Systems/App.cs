@@ -27,7 +27,7 @@ public sealed class App {
 
     public App(World world) => this.world = world;
 
-    public SystemBuilder AddGeneratedSystem(Delegate systemFn, SystemExecutor executor) => new SystemBuilder(this, systemFn, executor);
+    public SystemConfigurator AddGeneratedSystem(Delegate systemFn, SystemExecutor executor) => new SystemConfigurator(this, systemFn, executor);
 
     internal void RegisterSystem(SystemDescription description, MethodInfo method) {
         SystemStorage.Register(ref description, method);

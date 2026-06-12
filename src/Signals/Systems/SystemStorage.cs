@@ -29,7 +29,7 @@ public delegate void SystemExecutor(Delegate system, World world, Commands comma
 ///     This is the main api for system registration.
 /// </remarks>
 /// </summary>
-public ref struct SystemBuilder(App app, Delegate systemFn, SystemExecutor? executor = null) {
+public ref struct SystemConfigurator(App app, Delegate systemFn, SystemExecutor? executor = null) {
     private readonly App app = app;
     private readonly SystemFunction system = new SystemFunction(systemFn, executor);
     private Stage stage = Stage.Update;
@@ -40,44 +40,44 @@ public ref struct SystemBuilder(App app, Delegate systemFn, SystemExecutor? exec
 
     private Func<World, bool> condition;
     
-    public SystemBuilder When(Func<World, bool> condition) {
+    public SystemConfigurator When(Func<World, bool> condition) {
         this.condition = condition;
         return this;
     }
 
-    public SystemBuilder InStage(Stage stage) {
+    public SystemConfigurator InStage(Stage stage) {
         this.stage = stage;
         return this;
     }
 
-    public SystemBuilder WithTag(string tagName) {
+    public SystemConfigurator WithTag(string tagName) {
         tags.Add(Tags.GetOrCreate(tagName));
         return this;
     }
 
-    public SystemBuilder WithTags(ReadOnlySpan<string> tagNames) {
+    public SystemConfigurator WithTags(ReadOnlySpan<string> tagNames) {
         foreach (var name in tagNames)
             tags.Add(Tags.GetOrCreate(name));
         return this;
     }
 
-    public SystemBuilder RequireTag(string tagName) {
+    public SystemConfigurator RequireTag(string tagName) {
         requiredTags.Add(Tags.GetOrCreate(tagName));
         return this;
     }
 
-    public SystemBuilder RequireTags(ReadOnlySpan<string> tagNames) {
+    public SystemConfigurator RequireTags(ReadOnlySpan<string> tagNames) {
         foreach (var name in tagNames)
             requiredTags.Add(Tags.GetOrCreate(name));
         return this;
     }
 
-    public SystemBuilder After(params string[] labels) {
+    public SystemConfigurator After(params string[] labels) {
         after.AddRange(labels);
         return this;
     }
 
-    public SystemBuilder Before(params string[] labels) {
+    public SystemConfigurator Before(params string[] labels) {
         before.AddRange(labels);
         return this;
     }
@@ -130,7 +130,6 @@ public struct SystemFunction {
         };
     }
 }
-
 
 public struct SystemDescription() {
     public SystemHandle Handle;
