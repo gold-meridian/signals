@@ -17,7 +17,6 @@ namespace Signals;
 /// </remarks>
 [StructLayout(LayoutKind.Explicit, Size = 8)]
 [DebuggerTypeProxy(typeof(DebugView))]
-[method: MethodImpl(MethodImplOptions.AggressiveInlining)]
 public readonly unsafe struct Entity(uint id, ushort generation, ushort world) {
     /// <summary>
     ///     The raw index of this entity in its parent worlds storage. 
@@ -124,6 +123,14 @@ public readonly unsafe struct Entity(uint id, ushort generation, ushort world) {
                 }
                 return components;
             }
+        }
+    }
+}
+
+public static partial class EntityExt {
+    extension(Entity entity) {
+        public EntityView<T1> View<T1>() where T1 : struct {
+            return new EntityView<T1>(entity);
         }
     }
 }
