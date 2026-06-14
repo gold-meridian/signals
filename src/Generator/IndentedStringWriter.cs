@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Generator;
 
-internal sealed class IndentedStringWriter : IDisposable {
+public sealed class IndentedStringWriter : IDisposable {
     public readonly struct Scope : IDisposable {
         private readonly IndentedStringWriter _writer;
         public Scope(IndentedStringWriter writer) => _writer = writer;
@@ -69,8 +69,8 @@ internal sealed class IndentedStringWriter : IDisposable {
     public void EndScope() {
         Indent--;
         WriteLine("}");
-
     }
+    
     public void EndScope([InterpolatedStringHandlerArgument("")] ref IndentedStringWriterInterpolationHandler handler) => EndScope();
     
     public void Dispose() { }
@@ -83,7 +83,7 @@ internal sealed class IndentedStringWriter : IDisposable {
     }
 
     [InterpolatedStringHandler]
-    internal readonly struct IndentedStringWriterInterpolationHandler {
+    public readonly struct IndentedStringWriterInterpolationHandler {
         private readonly IndentedStringWriter writer;
         public IndentedStringWriterInterpolationHandler(int literalLength, int formattedCount, IndentedStringWriter writer) {
             this.writer = writer;

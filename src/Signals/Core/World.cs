@@ -59,9 +59,6 @@ public sealed partial class World : IDisposable {
     public static readonly World[] AllWorlds = new World[ushort.MaxValue];
     public readonly ushort Id;
     private static int worldIdCounter = 0;
-
-    public event Action<World, Entity>? OnEntityCreated;
-    public event Action<World, Entity>? OnEntityDestroyed;
     
     private readonly object layoutLock = new();
 
@@ -80,7 +77,6 @@ public sealed partial class World : IDisposable {
 
         var entity = new Entity((uint)id, Generations[id], Id);
         
-        OnEntityCreated?.Invoke(this, entity);
         return entity;
     }
 
@@ -97,8 +93,6 @@ public sealed partial class World : IDisposable {
         Generations[id]++;
         PresenceMask.Unset((int)id);
         freeIds.Push(id);
-
-        OnEntityDestroyed?.Invoke(this, new Entity(id, generation, Id));
     }
 
     /// <summary>

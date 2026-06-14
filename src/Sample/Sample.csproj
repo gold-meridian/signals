@@ -9,11 +9,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="NUnit" Version="4.4.0" />
+        <PackageReference Include="NUnit" Version="4.4.0"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Signals\Signals.csproj" />
+        <ProjectReference Include="..\Signals\Signals.csproj"/>
+        <ProjectReference Include="..\Generator\Generator.csproj" PrivateAssets="All" ReferenceOutputAssembly="false" OutputItemType="Analyzer"/>
     </ItemGroup>
 
 </Project>

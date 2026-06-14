@@ -15,9 +15,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Generator\Generator.csproj"
-                          PrivateAssets="All"
-                          ReferenceOutputAssembly="false"
-                          OutputItemType="Analyzer"/>
+        <ProjectReference Include="..\Generator\Generator.csproj" PrivateAssets="All" ReferenceOutputAssembly="false" OutputItemType="Analyzer"/>
+        <ProjectReference Include="..\Generator.Private\Generator.Private.csproj" PrivateAssets="All" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
     </ItemGroup>
 </Project>
