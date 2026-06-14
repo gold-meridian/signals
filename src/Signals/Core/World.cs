@@ -42,7 +42,7 @@ public static class ComponentStore {
     public static Type GetType(int id) => idToType[id];
 }
 
-public static class ComponentMeta<T> where T : struct {
+public static class Component<T> where T : struct {
     public static readonly ComponentInfo Info = new(ComponentStore.GetId<T>(), Unsafe.SizeOf<T>());
 }
 
@@ -110,7 +110,7 @@ public sealed partial class World : IDisposable {
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref T Get<T>(uint id) where T : struct {
-        return ref Unsafe.As<SparseSet<T>>(componentStores[ComponentMeta<T>.Info.Id]!).GetUnsafe((int)id);
+        return ref Unsafe.As<SparseSet<T>>(componentStores[Component<T>.Info.Id]!).GetUnsafe((int)id);
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -119,7 +119,7 @@ public sealed partial class World : IDisposable {
             throw new InvalidOperationException($"entity {id} is dead or invalid!");
         }
     
-        var store = componentStores[ComponentMeta<T>.Info.Id];
+        var store = componentStores[Component<T>.Info.Id];
         if (store == null) {
             throw new KeyNotFoundException($"component {typeof(T).Name} not found in world!");
         }
@@ -128,7 +128,7 @@ public sealed partial class World : IDisposable {
     }
 
     public void Set<T>(uint id, in T value) where T : struct {
-        int cid = ComponentMeta<T>.Info.Id;
+        int cid = Component<T>.Info.Id;
         if (cid >= componentStores.Length) 
             Array.Resize(ref componentStores, Math.Max(cid + 1, componentStores.Length * 2));
         
@@ -138,7 +138,7 @@ public sealed partial class World : IDisposable {
     }
     
     public void Remove<T>(uint id) where T : struct {
-        int cid = ComponentMeta<T>.Info.Id;
+        int cid = Component<T>.Info.Id;
         if (cid < componentStores.Length && componentStores[cid] != null && Has<T>(id))
         {
             componentStores[cid]!.Remove((int)id);
