@@ -17,24 +17,27 @@ unsafe partial class Program {
         using var world = new World();
         var app = new App(world);
         
-        for(int i = 0; i < entity_count; i++) {
-            var entity = world
-                .Create()
-                .Set(new Age());
-            
-            Console.WriteLine($"entity with id {entity.Id} created");
-        }
-        
-        Console.WriteLine(Component.Lookup<Age>.Info.Id);
+        app
+            .AddSystem(SpawnSomeEntities)
+            .InStage(stage: Stage.Initialization)
+            .Before("IncrementEntities")
+            .Build();
         
         app
             .AddSystem(AgeAllEntities)
             .InStage(stage: Stage.Update)
             .WithTag("IncrementEntities")
             .Build();
+        
+        app.Run();
+    }
 
-        for(int i = 0; i < 4; i++) {
-            app.Run();
+    [System]
+    static partial void SpawnSomeEntities(Commands cmds) {
+        for(var i = 0; i < entity_count; i++) {
+            cmds
+                .Spawn()
+                .Set(new Age());
         }
     }
     

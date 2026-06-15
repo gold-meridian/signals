@@ -3,20 +3,16 @@ using System.Runtime.CompilerServices;
 
 namespace Signals;
 
-internal interface IDeferredCommand {
-    void Execute(World world, Commands commands);
-}
-
-public readonly struct DeferredEntityRef {
+public readonly struct EntityIdOnly {
     public readonly int SpawnIndex;
     public readonly u32 EntityId;
 
-    public DeferredEntityRef(int spawnIndex) {
+    public EntityIdOnly(int spawnIndex) {
         SpawnIndex = spawnIndex;
         EntityId = 0;
     }
 
-    public DeferredEntityRef(u32 entityId) {
+    public EntityIdOnly(u32 entityId) {
         SpawnIndex = -1;
         EntityId = entityId;
     }
@@ -24,141 +20,165 @@ public readonly struct DeferredEntityRef {
     public bool IsSpawned => SpawnIndex >= 0;
 }
 
-internal readonly struct SpawnEntityCommand(int spawnIndex) : IDeferredCommand {
-    private readonly int spawnIndex = spawnIndex;
-
-    public void Execute(World world, Commands commands) {
-        var entity = world.Create();
-        commands.SetSpawnedEntityId(spawnIndex, entity.Id);
+internal readonly struct Command {
+    internal enum CommandKind : byte {
+        Spawn,
+        Despawn,
+        InsertComponent,
+        RemoveComponent,
     }
-}
+    
+    public readonly CommandKind Kind;
+    public readonly EntityIdOnly EntityIdOnly;
+    public readonly int ComponentId;
+    public readonly object? ComponentData;
 
-internal readonly struct DespawnEntityCommand(DeferredEntityRef entityRef) : IDeferredCommand {
-    private readonly DeferredEntityRef entityRef = entityRef;
-
-    public void Execute(World world, Commands commands) {
-        var entityId = commands.ResolveEntityId(entityRef);
-        if (world.Exists(entityId)) {
-            world.Destroy(entityId, world.Generations[entityId]);
-        }
+    private Command(CommandKind kind, EntityIdOnly entityIdOnly, int componentId = -1, object? data = null) {
+        Kind = kind;
+        EntityIdOnly = entityIdOnly;
+        ComponentId = componentId;
+        ComponentData = data;
     }
-}
 
-internal readonly struct InsertComponentCommand<T>(DeferredEntityRef entityRef, T component) : IDeferredCommand where T : struct {
-    private readonly DeferredEntityRef entityRef = entityRef;
-    private readonly T component = component;
+    public static Command Spawn(int spawnIndex) 
+        => new(CommandKind.Spawn, new(spawnIndex));
 
-    public void Execute(World world, Commands commands) {
-        var entityId = commands.ResolveEntityId(entityRef);
-        if (world.Exists(entityId)) {
-            world.Set(entityId, component);
-        }
-    }
-}
+    public static Command Despawn(EntityIdOnly entityIdOnly) 
+        => new(CommandKind.Despawn, entityIdOnly);
 
-internal readonly struct RemoveComponentCommand<T>(DeferredEntityRef entityRef) : IDeferredCommand where T : struct {
-    private readonly DeferredEntityRef entityRef = entityRef;
+    public static Command InsertComponent<T>(EntityIdOnly entityIdOnly, in T component) where T : struct 
+        => new(CommandKind.InsertComponent, entityIdOnly, Component.GetId<T>(), (object)component);
 
-    public void Execute(World world, Commands commands) {
-        var entityId = commands.ResolveEntityId(entityRef);
-        if (world.Exists(entityId) && world.Has<T>(entityId)) {
-            world.Remove<T>(entityId);
-        }
-    }
+    public static Command RemoveComponent<T>(EntityIdOnly entityIdOnly) where T : struct
+        => new(CommandKind.RemoveComponent, entityIdOnly, Component.GetId<T>());
 }
 
 public sealed class Commands {
     private World? world;
-    private readonly ConcurrentBag<IDeferredCommand> localCommands = new();
-    private uint[] spawnedEntityIds = new uint[1024];
+    private readonly List<Command> commands = new(256);
+    private readonly List<Command> spawnCommands = new(64);
+    private uint[] spawnedEntityIds = new uint[256];
     private int spawnedEntityCount = 0;
-    private readonly object resizeLock = new();
 
     public bool IsInitialized => world != null;
 
     public void Fetch(World world) {
         this.world = world;
-        localCommands.Clear();
-        Array.Clear(spawnedEntityIds);
+        commands.Clear();
+        spawnCommands.Clear();
+        Array.Clear(spawnedEntityIds, 0, spawnedEntityCount);
         spawnedEntityCount = 0;
     }
 
     internal void Apply() {
         if (world == null) return;
 
-        var commands = localCommands.ToList();
-    
-        foreach (var cmd in commands) {
-            if (cmd is SpawnEntityCommand) {
-                cmd.Execute(world, this);
+        for (int i = 0; i < spawnCommands.Count; i++) {
+            var cmd = spawnCommands[i];
+            var entity = world.Create();
+            spawnedEntityIds[cmd.EntityIdOnly.SpawnIndex] = entity.Id;
+        }
+
+        for (int i = 0; i < commands.Count; i++) {
+            var cmd = commands[i];
+
+            var entityId = ResolveEntityId(cmd.EntityIdOnly);
+            if (!world.Exists(entityId)) continue;
+
+            switch (cmd.Kind) {
+                case Command.CommandKind.Despawn:
+                    world.Destroy(
+                        entityId,
+                        world.Generations[entityId]
+                    );
+                    break;
+
+                case Command.CommandKind.InsertComponent:
+                    ExecuteInsert(cmd, entityId);
+                    break;
+
+                case Command.CommandKind.RemoveComponent:
+                    ExecuteRemove(cmd, entityId);
+                    break;
             }
         }
 
-        foreach (var cmd in commands) {
-            if (cmd is not SpawnEntityCommand) {
-                cmd.Execute(world, this);
-            }
-        }
+        commands.Clear();
+        spawnCommands.Clear();
+    }
 
-        localCommands.Clear();
-        Array.Clear(spawnedEntityIds, 0, spawnedEntityCount);
-        spawnedEntityCount = 0;
+    private void ExecuteInsert(Command cmd, uint entityId) {
+        var info = Component.GetInfo(cmd.ComponentId);
+        var method = typeof(Commands)
+            .GetMethod(
+                nameof(ExecuteInsertGeneric),
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Instance
+            )!
+            .MakeGenericMethod(info.Type);
+
+        method.Invoke(this, new[] { cmd.ComponentData, entityId });
+    }
+
+    private void ExecuteInsertGeneric<T>(object data, uint entityId) where T : struct {
+        world!.Set(entityId, (T)data);
+    }
+
+    private void ExecuteRemove(Command cmd, uint entityId) {
+        var info = Component.GetInfo(cmd.ComponentId);
+        var method = typeof(World)
+            .GetMethod(
+                nameof(World.Remove),
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Instance
+            )!
+            .MakeGenericMethod(info.Type);
+
+        method.Invoke(world, new object[] { entityId });
     }
 
     public EntityCommands Spawn() {
-        int spawnIndex = 
-            Interlocked.Increment(ref spawnedEntityCount) - 1;
-        
+        int spawnIndex = spawnedEntityCount++;
         if (spawnIndex >= spawnedEntityIds.Length) {
-            lock (resizeLock) {
-                if (spawnIndex >= spawnedEntityIds.Length) {
-                    Array.Resize(ref spawnedEntityIds, Math.Max(spawnIndex + 1, spawnedEntityIds.Length * 2));
-                }
-            }
+            Array.Resize(ref spawnedEntityIds, Math.Max(spawnIndex + 1, spawnedEntityIds.Length * 2));
         }
 
-        localCommands.Add(new SpawnEntityCommand(spawnIndex));
-        return new EntityCommands(this, new DeferredEntityRef(spawnIndex));
+        spawnCommands.Add(Command.Spawn(spawnIndex));
+        return new EntityCommands(this, new EntityIdOnly(spawnIndex));
     }
 
-    public EntityCommands Entity(u32 entityId) {
-        return new EntityCommands(this, new DeferredEntityRef(entityId));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void QueueCommand(IDeferredCommand command) {
-        localCommands.Add(command);
+    public EntityCommands Entity(uint entityId) {
+        return new EntityCommands(this, new EntityIdOnly(entityId));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void SetSpawnedEntityId(int index, u32 entityId) => spawnedEntityIds[index] = entityId;
+    internal void QueueCommand(Command cmd) {
+        commands.Add(cmd);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal u32 GetSpawnedEntityId(int index) => spawnedEntityIds[index];
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal u32 ResolveEntityId(in DeferredEntityRef entityRef) {
-        return entityRef.IsSpawned
-            ? GetSpawnedEntityId(entityRef.SpawnIndex)
-            : entityRef.EntityId;
+    internal uint ResolveEntityId(in EntityIdOnly entityIdOnly) {
+        return entityIdOnly.IsSpawned
+            ? spawnedEntityIds[entityIdOnly.SpawnIndex]
+            : entityIdOnly.EntityId;
     }
 }
 
-public readonly ref struct EntityCommands(Commands commands, DeferredEntityRef entityRef) {
+public readonly ref struct EntityCommands(Commands commands, EntityIdOnly entityIdOnly ) {
     private readonly Commands commands = commands;
-    private readonly DeferredEntityRef entityRef = entityRef;
-    
+    private readonly EntityIdOnly entityIdOnly = entityIdOnly;
+
     public readonly EntityCommands Set<T>(T component) where T : struct {
-        commands.QueueCommand(new InsertComponentCommand<T>(entityRef, component));
+        commands.QueueCommand(Command.InsertComponent(entityIdOnly, in component));
         return this;
     }
 
     public readonly EntityCommands Remove<T>() where T : struct {
-        commands.QueueCommand(new RemoveComponentCommand<T>(entityRef));
+        commands.QueueCommand(Command.RemoveComponent<T>(entityIdOnly));
         return this;
     }
 
     public readonly void Despawn() {
-        commands.QueueCommand(new DespawnEntityCommand(entityRef));
+        commands.QueueCommand(Command.Despawn(entityIdOnly));
     }
 }
