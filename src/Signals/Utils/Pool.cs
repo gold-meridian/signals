@@ -17,8 +17,8 @@ public class Pool<T> where T : new() {
     public Pool(FactoryDelegate factory, int capacity) {
         this.factory = factory;
         open = new Stack<T>(capacity);
-        for (int i = 0; i < capacity; i++)
-        {
+        
+        for (int i = 0; i < capacity; i++) {
             open.Push(factory());
         }
     }

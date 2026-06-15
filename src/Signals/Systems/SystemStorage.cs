@@ -59,8 +59,8 @@ public struct SystemFunction {
 
 public struct SystemDescription() {
     public SystemHandle Handle;
-    public SystemFunction Function;
-    public Type CallbackType;
+    public required SystemFunction Function;
+    public required Type CallbackType;
     
     public List<Tag> Tags;
     public List<Tag> RequiredTags;

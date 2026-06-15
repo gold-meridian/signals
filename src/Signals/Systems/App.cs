@@ -24,6 +24,7 @@ public sealed class App {
     private u32 systemCount = 0;
     
     private readonly Dictionary<Type, List<SystemDescription>> callbacks = new();
+    private readonly Dictionary<Type, List<SystemDescription>> sortedCache = new();
 
     public App(World world) => this.world = world;
 
@@ -47,22 +48,28 @@ public sealed class App {
     }
 
     private void RunCallback(Type callbackType) {
-        if (!callbacks.TryGetValue(callbackType, out var systems))
+        if (!callbacks.TryGetValue(callbackType, out var systems) ||
+            systems.Count == 0)
             return;
+
+        if (!sortedCache.TryGetValue(callbackType, out var sorted)) {
+            sorted = sortedCache[callbackType] = Sort(systems);
+        }
 
         var commands = world.AcquireCommandBuffer();
 
-        var ordered = Sort(systems);
+        try {
+            foreach (var system in sorted) {
+                if (system.RunCondition != null &&
+                    !system.RunCondition(world))
+                    continue;
 
-        foreach (var system in ordered) {
-            if (system.RunCondition != null && !system.RunCondition(world))
-                continue;
-
-            system.Function.Execute(world, commands);
-            commands.Apply();
+                system.Function.Execute(world, commands);
+                commands.Apply();
+            }
+        } finally {
+            world.ReleaseCommandBuffer(commands);
         }
-        
-        world.ReleaseCommandBuffer(commands);
     }
 
     private List<SystemDescription> Sort(List<SystemDescription> systems) {
