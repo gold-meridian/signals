@@ -82,13 +82,36 @@ public sealed partial class World : IDisposable {
     private static i32 worldIdCounter = 0;
     
     private readonly object layoutLock = new();
-
-    private readonly Queue<Commands> cmdBuffersQueue;
-    private readonly Pool<Commands> cmdBuffers;
+    
+    private readonly Pool<Commands> commandBufferPool;
+    private readonly Stack<Commands> availableBuffers = new();
 
     public World() {
         Id = (u16)Interlocked.Increment(ref worldIdCounter);
         AllWorlds[Id] = this;
+        
+        commandBufferPool = new Pool<Commands>(() => new Commands(), capacity: 8);
+
+        for (int i = 0; i < 8; i++) {
+            availableBuffers.Push(commandBufferPool.Rent());
+        }
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal Commands AcquireCommandBuffer() {
+        if (availableBuffers.TryPop(out var buffer)) {
+            buffer.Fetch(this);
+            return buffer;
+        }
+
+        var newBuffer = commandBufferPool.Rent();
+        newBuffer.Fetch(this);
+        return newBuffer;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void ReleaseCommandBuffer(Commands buffer) {
+        availableBuffers.Push(buffer);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

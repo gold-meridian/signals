@@ -23,80 +23,6 @@ public readonly struct SystemHandle(u32 id) {
 /// </summary>
 public delegate void SystemExecutor(Delegate system, World world, Commands commands);
 
-/// <summary>
-///     A builder for configuring, and registering systems with a fluent syntax api.
-/// <remarks>
-///     This is the main api for system registration.
-/// </remarks>
-/// </summary>
-public ref struct SystemConfigurator(App app, Delegate systemFn, SystemExecutor? executor = null) {
-    private readonly App app = app;
-    private readonly SystemFunction system = new SystemFunction(systemFn, executor);
-    private Stage stage = Stage.Update;
-    private readonly List<Tag> tags = new();
-    private readonly List<Tag> requiredTags = new();
-    private readonly List<string> after = new();
-    private readonly List<string> before = new();
-
-    private Func<World, bool> condition;
-    
-    public SystemConfigurator When(Func<World, bool> condition) {
-        this.condition = condition;
-        return this;
-    }
-
-    public SystemConfigurator InStage(Stage stage) {
-        this.stage = stage;
-        return this;
-    }
-
-    public SystemConfigurator WithTag(string tagName) {
-        tags.Add(Tags.GetOrCreate(tagName));
-        return this;
-    }
-
-    public SystemConfigurator WithTags(ReadOnlySpan<string> tagNames) {
-        foreach (var name in tagNames)
-            tags.Add(Tags.GetOrCreate(name));
-        return this;
-    }
-
-    public SystemConfigurator RequireTag(string tagName) {
-        requiredTags.Add(Tags.GetOrCreate(tagName));
-        return this;
-    }
-
-    public SystemConfigurator RequireTags(ReadOnlySpan<string> tagNames) {
-        foreach (var name in tagNames)
-            requiredTags.Add(Tags.GetOrCreate(name));
-        return this;
-    }
-
-    public SystemConfigurator After(params string[] labels) {
-        after.AddRange(labels);
-        return this;
-    }
-
-    public SystemConfigurator Before(params string[] labels) {
-        before.AddRange(labels);
-        return this;
-    }
-
-    public void Build() {
-        var description = new SystemDescription() {
-            Function = system,
-            Stage = stage,
-            Tags = tags,
-            RequiredTags = requiredTags,
-            RunAfter = after,
-            RunBefore = before,
-            RunCondition = condition
-        };
-        
-        app.RegisterSystem(description, system.Method);
-    }
-}
-
 public struct SystemFunction {
     private readonly Delegate systemDelegate;
     private SystemExecutor executor;
@@ -133,8 +59,9 @@ public struct SystemFunction {
 
 public struct SystemDescription() {
     public SystemHandle Handle;
-    public SystemFunction Function;
-    public Stage Stage;
+    public required SystemFunction Function;
+    public required Type CallbackType;
+    
     public List<Tag> Tags;
     public List<Tag> RequiredTags;
     

@@ -7,6 +7,9 @@ using Signals.Systems;
 namespace Sample;
 
 unsafe partial class Program {
+    internal struct Initialize;
+    internal struct Update;
+    
     internal struct Age {
         public i32 Frames;
     }
@@ -19,17 +22,27 @@ unsafe partial class Program {
         
         app
             .AddSystem(SpawnSomeEntities)
-            .InStage(stage: Stage.Initialization)
+            .InCallback<Initialize>()
             .Before("IncrementEntities")
             .Build();
         
         app
             .AddSystem(AgeAllEntities)
-            .InStage(stage: Stage.Update)
+            .InCallback<Update>()
             .WithTag("IncrementEntities")
             .Build();
         
-        app.Run();
+        app
+            .AddSystem(KillOldEntities)
+            .InCallback<Update>()
+            .After("IncrementEntities")
+            .Build();
+        
+        app.RunCallback<Initialize>();
+
+        for(var i = 0; i < 4; i++) {
+            app.RunCallback<Update>();
+        }
     }
 
     [System]
@@ -39,6 +52,8 @@ unsafe partial class Program {
                 .Spawn()
                 .Set(new Age());
         }
+        
+        Console.WriteLine("spawned entities");
     }
     
     [System]
@@ -46,5 +61,12 @@ unsafe partial class Program {
         age.Frames += 1;
         
         Console.WriteLine($"entity #{entity.Id} is now {age.Frames} frames old!");
+    }
+    
+    [System]
+    static partial void KillOldEntities(Commands cmds, Entity entity, ref Age age) {
+        if(age.Frames == 4) {
+            entity.Destroy();
+        } 
     }
 }
