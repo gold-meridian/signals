@@ -11,10 +11,6 @@ unsafe partial class Program {
         public i32 Frames;
     }
     
-    internal struct Counter {
-        public i32 Count;
-    }
-    
     private const int entity_count = 1;
     
     static void Main() { 
