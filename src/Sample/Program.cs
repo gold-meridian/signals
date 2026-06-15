@@ -15,12 +15,11 @@ unsafe partial class Program {
     
     static void Main() { 
         using var world = new World();
-
         var app = new App(world);
         
-        
         for(int i = 0; i < entity_count; i++) {
-            var entity = world.Create()
+            var entity = world
+                .Create()
                 .Set(new Age());
             
             Console.WriteLine($"entity with id {entity.Id} created");
@@ -41,6 +40,6 @@ unsafe partial class Program {
     static partial void AgeAllEntities(Entity entity, ref Age age) {
         age.Frames += 1;
         
-        Console.WriteLine($"{entity} is now {age.Frames} frames old!");
+        Console.WriteLine($"entity #{entity.Id} is now {age.Frames} frames old!");
     }
 }
