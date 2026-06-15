@@ -12,18 +12,18 @@ namespace Signals.Systems;
 
  */
 
-
 public struct AppConfig() {
     public string Label;
 }
 
 public sealed class App {
     private readonly World world;
-    private readonly Dictionary<Stage, List<SystemDescription>> stages = new();
     private readonly Dictionary<string, SystemHandle> systemsByLabel = new();
     private SystemDescription[] systemsById = new SystemDescription[64];
     private Dictionary<MethodInfo, SystemHandle> systemsByMethod = new();
     private u32 systemCount = 0;
+    
+    private readonly Dictionary<Type, List<SystemDescription>> callbacks = new();
 
     public App(World world) => this.world = world;
 
@@ -31,32 +31,36 @@ public sealed class App {
 
     internal void RegisterSystem(SystemDescription description, MethodInfo method) {
         SystemStorage.Register(ref description, method);
-    
-        var handle = description.Handle;
-    
+
         foreach (var tag in description.Tags)
-            Tags.AddSystem(tag, handle);
+            Tags.AddSystem(tag, description.Handle);
 
-        if (!stages.ContainsKey(description.Stage))
-            stages[description.Stage] = new();
+        var callbackType = description.CallbackType;
+        if (!callbacks.ContainsKey(callbackType))
+            callbacks[callbackType] = new();
 
-        stages[description.Stage].Add(description);
+        callbacks[callbackType].Add(description);
+    }
+    
+    public void RunCallback<T>() where T : struct {
+        RunCallback(typeof(T));
     }
 
-    public void Run() {
+    private void RunCallback(Type callbackType) {
+        if (!callbacks.TryGetValue(callbackType, out var systems))
+            return;
+
         var commands = new Commands();
         commands.Fetch(world);
 
-        foreach (var (stage, systems) in stages.OrderBy(kvp => kvp.Key.Id)) {
-            var ordered = Sort(systems);
+        var ordered = Sort(systems);
 
-            foreach (var system in ordered) {
-                if (system.RunCondition != null && !system.RunCondition(world))
-                    continue;
-                
-                system.Function.Execute(world, commands);
-                commands.Apply();
-            }
+        foreach (var system in ordered) {
+            if (system.RunCondition != null && !system.RunCondition(world))
+                continue;
+
+            system.Function.Execute(world, commands);
+            commands.Apply();
         }
     }
 

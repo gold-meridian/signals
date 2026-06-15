@@ -32,21 +32,21 @@ public delegate void SystemExecutor(Delegate system, World world, Commands comma
 public ref struct SystemConfigurator(App app, Delegate systemFn, SystemExecutor? executor = null) {
     private readonly App app = app;
     private readonly SystemFunction system = new SystemFunction(systemFn, executor);
-    private Stage stage = Stage.Update;
     private readonly List<Tag> tags = new();
     private readonly List<Tag> requiredTags = new();
     private readonly List<string> after = new();
     private readonly List<string> before = new();
+    private Type callback;
 
     private Func<World, bool> condition;
     
-    public SystemConfigurator When(Func<World, bool> condition) {
-        this.condition = condition;
+    public SystemConfigurator InCallback<T>() where T : struct {
+        callback = typeof(T);
         return this;
     }
-
-    public SystemConfigurator InStage(Stage stage) {
-        this.stage = stage;
+    
+    public SystemConfigurator When(Func<World, bool> condition) {
+        this.condition = condition;
         return this;
     }
 
@@ -85,7 +85,7 @@ public ref struct SystemConfigurator(App app, Delegate systemFn, SystemExecutor?
     public void Build() {
         var description = new SystemDescription() {
             Function = system,
-            Stage = stage,
+            CallbackType = callback,
             Tags = tags,
             RequiredTags = requiredTags,
             RunAfter = after,
@@ -134,7 +134,8 @@ public struct SystemFunction {
 public struct SystemDescription() {
     public SystemHandle Handle;
     public SystemFunction Function;
-    public Stage Stage;
+    public Type CallbackType;
+    
     public List<Tag> Tags;
     public List<Tag> RequiredTags;
     

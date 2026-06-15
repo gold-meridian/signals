@@ -7,6 +7,9 @@ using Signals.Systems;
 namespace Sample;
 
 unsafe partial class Program {
+    internal struct Initialize;
+    internal struct Update;
+    
     internal struct Age {
         public i32 Frames;
     }
@@ -19,17 +22,21 @@ unsafe partial class Program {
         
         app
             .AddSystem(SpawnSomeEntities)
-            .InStage(stage: Stage.Initialization)
+            .InCallback<Initialize>()
             .Before("IncrementEntities")
             .Build();
         
         app
             .AddSystem(AgeAllEntities)
-            .InStage(stage: Stage.Update)
+            .InCallback<Update>()
             .WithTag("IncrementEntities")
             .Build();
         
-        app.Run();
+        app.RunCallback<Initialize>();
+
+        for(var i = 0; i < 4; i++) {
+            app.RunCallback<Update>();
+        }
     }
 
     [System]
@@ -39,6 +46,8 @@ unsafe partial class Program {
                 .Spawn()
                 .Set(new Age());
         }
+        
+        Console.WriteLine("spawned entities");
     }
     
     [System]
