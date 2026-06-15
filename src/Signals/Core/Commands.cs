@@ -9,14 +9,14 @@ internal interface IDeferredCommand {
 
 public readonly struct DeferredEntityRef {
     public readonly int SpawnIndex;
-    public readonly uint EntityId;
+    public readonly u32 EntityId;
 
     public DeferredEntityRef(int spawnIndex) {
         SpawnIndex = spawnIndex;
         EntityId = 0;
     }
 
-    public DeferredEntityRef(uint entityId) {
+    public DeferredEntityRef(u32 entityId) {
         SpawnIndex = -1;
         EntityId = entityId;
     }
@@ -121,7 +121,7 @@ public sealed class Commands {
         return new EntityCommands(this, new DeferredEntityRef(spawnIndex));
     }
 
-    public EntityCommands Entity(uint entityId) {
+    public EntityCommands Entity(u32 entityId) {
         return new EntityCommands(this, new DeferredEntityRef(entityId));
     }
 
@@ -131,13 +131,13 @@ public sealed class Commands {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void SetSpawnedEntityId(int index, uint entityId) => spawnedEntityIds[index] = entityId;
+    internal void SetSpawnedEntityId(int index, u32 entityId) => spawnedEntityIds[index] = entityId;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal uint GetSpawnedEntityId(int index) => spawnedEntityIds[index];
+    internal u32 GetSpawnedEntityId(int index) => spawnedEntityIds[index];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal uint ResolveEntityId(in DeferredEntityRef entityRef) {
+    internal u32 ResolveEntityId(in DeferredEntityRef entityRef) {
         return entityRef.IsSpawned
             ? GetSpawnedEntityId(entityRef.SpawnIndex)
             : entityRef.EntityId;

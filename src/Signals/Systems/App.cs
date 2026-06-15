@@ -23,7 +23,7 @@ public sealed class App {
     private readonly Dictionary<string, SystemHandle> systemsByLabel = new();
     private SystemDescription[] systemsById = new SystemDescription[64];
     private Dictionary<MethodInfo, SystemHandle> systemsByMethod = new();
-    private uint systemCount = 0;
+    private u32 systemCount = 0;
 
     public App(World world) => this.world = world;
 

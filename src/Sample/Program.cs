@@ -11,6 +11,10 @@ unsafe partial class Program {
         public i32 Frames;
     }
     
+    internal struct Counter {
+        public i32 Count;
+    }
+    
     private const int entity_count = 1;
     
     static void Main() { 
@@ -25,7 +29,7 @@ unsafe partial class Program {
             Console.WriteLine($"entity with id {entity.Id} created");
         }
         
-        Console.WriteLine(Component.Lookup<Age>.Info.TypeName);
+        Console.WriteLine(Component.Lookup<Age>.Info.Id);
         
         app
             .AddSystem(AgeAllEntities)

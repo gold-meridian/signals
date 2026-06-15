@@ -17,28 +17,28 @@ namespace Signals;
 /// </remarks>
 [StructLayout(LayoutKind.Explicit, Size = 8)]
 [DebuggerTypeProxy(typeof(DebugView))]
-public readonly unsafe struct Entity(uint id, ushort generation, ushort world) {
+public readonly unsafe struct Entity(u32 id, u16 generation, u16 world) {
     /// <summary>
     ///     The raw index of this entity in its parent worlds storage. 
     /// </summary>
-    [FieldOffset(0)] public readonly uint Id = id;
+    [FieldOffset(0)] public readonly u32 Id = id;
     /// <summary>
     ///     The version of this entity. Used to prevent stale entity handles.
     /// </summary>
-    [FieldOffset(4)] public readonly ushort Generation = generation;
+    [FieldOffset(4)] public readonly u16 Generation = generation;
     /// <summary>
     ///     The parent world that owns and manages the data for this entity.
     /// </summary>
-    [FieldOffset(6)] public readonly ushort WorldId = world;
+    [FieldOffset(6)] public readonly u16 WorldId = world;
     
     public World World => World.AllWorlds[WorldId];
     
     /// <summary>
     ///     The size of the <see cref="Entity"/> struct in bytes.
     /// </summary>
-    public static readonly int SIZE = GetSize();
+    public static readonly i32 SIZE = GetSize();
 
-    private static unsafe int GetSize() => sizeof(Entity);
+    private static unsafe i32 GetSize() => sizeof(Entity);
     
     /// <summary>
     ///     Checks if an entity is currently active in its world.
@@ -100,8 +100,8 @@ public readonly unsafe struct Entity(uint id, ushort generation, ushort world) {
     }
 
     internal sealed class DebugView(Entity target) {
-        public uint Id => target.Id;
-        public ushort Generation => target.Generation;
+        public u32 Id => target.Id;
+        public u16 Generation => target.Generation;
         public bool IsAlive => target.IsAlive;
 
         [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
@@ -113,7 +113,7 @@ public readonly unsafe struct Entity(uint id, ushort generation, ushort world) {
                 var world = target.World;
                 var mask = world.Masks[target.Id];
 
-                for (int i = 0; i < Signals.Component.Count; i++) {
+                for (var i = 0; i < Signals.Component.Count; i++) {
                     if (mask.IsSet(i)) {
                         var type = Component.GetInfo(i).Type;
                         var data = target.GetDebug(type);

@@ -9,21 +9,23 @@ namespace Signals;
 
 public static partial class Component {
     [DebuggerDisplay("ID: {Id}, Size: {Size}")]
-    public readonly record struct Info(int Id, int Size, Type Type, string TypeName) {
-        public static implicit operator int(Info cid) => cid.Id;
+    public readonly record struct Info(i32 Id, i32 Size, Type Type, string TypeName) {
+        public static implicit operator i32(Info cid) => cid.Id;
     }
     
     public static class Lookup<T> where T : struct {
         public static readonly Info Info;
 
         static Lookup() {
-            Info = new(GetId<T>(), Unsafe.SizeOf<T>(), typeof(T), typeof(T).Name);
+            Info = Register<T>();
         }
     }
     
-    private static int nextId = 0;
-    private static readonly ConcurrentDictionary<Type, int> typeToId = new();
-    private static readonly ConcurrentDictionary<int, Info> infoById = new();
+    private static i32 nextId = 0;
+    private static readonly ConcurrentDictionary<Type, i32> typeToId = new();
+    private static readonly ConcurrentDictionary<i32, Info> infoById = new();
+    
+    public static i32 Count => nextId;
     
     private static Info Register<T>() where T : struct {
         var type = typeof(T);
@@ -35,7 +37,7 @@ public static partial class Component {
             if (typeToId.TryGetValue(type, out cachedId))
                 return infoById[cachedId];
 
-            int id = nextId++;
+            i32 id = nextId++;
             var info = new Info(id, Unsafe.SizeOf<T>(), type, type.Name);
 
             typeToId[type] = id;
@@ -45,13 +47,13 @@ public static partial class Component {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int GetId<T>() where T : struct => Lookup<T>.Info.Id;
+    public static i32 GetId<T>() where T : struct => Lookup<T>.Info.Id;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Info GetInfo<T>() where T : struct => Lookup<T>.Info;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Info GetInfo(int id) {
+    public static Info GetInfo(i32 id) {
         if (!infoById.TryGetValue(id, out var info))
             throw new KeyNotFoundException($"component id {id} not registered!");
         return info;
@@ -59,27 +61,25 @@ public static partial class Component {
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Info GetInfo(Type type) {
-        if (!typeToId.TryGetValue(type, out int id) || !infoById.TryGetValue(id, out var info)) throw new KeyNotFoundException($"component {type.Name} not registered!");
+        if (!typeToId.TryGetValue(type, out var id) || !infoById.TryGetValue(id, out var info)) throw new KeyNotFoundException($"component {type.Name} not registered!");
         
         return info;
     }
-
-    public static int Count => nextId;
 }
 
 public sealed partial class World : IDisposable {
-    internal ushort[] Generations = new ushort[1024];
+    internal u16[] Generations = new u16[1024];
     private readonly ConcurrentStack<uint> freeIds = new();
-    private uint nextId = 0;
+    private u32 nextId = 0;
 
     private ISparseSet?[] componentStores = new ISparseSet[Component.Count];
 
     internal Bitset256[] Masks = new Bitset256[1024];
     internal BitmaskArray256 PresenceMask = new();
 
-    public static readonly World[] AllWorlds = new World[ushort.MaxValue];
-    public readonly ushort Id;
-    private static int worldIdCounter = 0;
+    public static readonly World[] AllWorlds = new World[u16.MaxValue];
+    public readonly u16 Id;
+    private static i32 worldIdCounter = 0;
     
     private readonly object layoutLock = new();
 
@@ -87,7 +87,7 @@ public sealed partial class World : IDisposable {
     private readonly Pool<Commands> cmdBuffers;
 
     public World() {
-        Id = (ushort)Interlocked.Increment(ref worldIdCounter);
+        Id = (u16)Interlocked.Increment(ref worldIdCounter);
         AllWorlds[Id] = this;
     }
 
@@ -106,7 +106,7 @@ public sealed partial class World : IDisposable {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Destroy(uint id, ushort generation) {
+    public void Destroy(u32 id, u16 generation) {
         if (!IsValid(id, generation)) return;
         
         foreach (int componentId in Masks[id]) {
@@ -125,25 +125,25 @@ public sealed partial class World : IDisposable {
     /// Checks if an entity handle (id and generation) is currently valid.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsValid(uint id, ushort generation) => id < nextId && Generations[id] == generation;
+    public bool IsValid(u32 id, u16 generation) => id < nextId && Generations[id] == generation;
 
     /// <summary>
     /// Checks if an entity ID currently points to an existing entity, ignoring generation.
     /// Useful for deferred commands where only the ID is known at queue time.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Exists(uint id) => id < nextId && PresenceMask.Get((int)id);
+    public bool Exists(u32 id) => id < nextId && PresenceMask.Get((int)id);
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsValid(uint id, uint generation) => id < nextId && Generations[id] == generation;
+    public bool IsValid(u32 id, u32 generation) => id < nextId && Generations[id] == generation;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ref T Get<T>(uint id) where T : struct {
+    public ref T Get<T>(u32 id) where T : struct {
         return ref Unsafe.As<SparseSet<T>>(componentStores[Component.Lookup<T>.Info.Id]!).GetUnsafe((int)id);
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ref T Get<T>(uint id, uint generation) where T : struct {
+    public ref T Get<T>(u32 id, u32 generation) where T : struct {
         if (!IsValid(id, generation)) {
             throw new InvalidOperationException($"entity {id} is dead or invalid!");
         }
@@ -157,7 +157,7 @@ public sealed partial class World : IDisposable {
     }
    
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Set<T>(uint id, in T value) where T : struct {
+    public void Set<T>(u32 id, in T value) where T : struct {
         int cid = Component.Lookup<T>.Info.Id;
         if (cid >= componentStores.Length) 
             Array.Resize(ref componentStores, Math.Max(cid + 1, componentStores.Length * 2));
@@ -168,7 +168,7 @@ public sealed partial class World : IDisposable {
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Remove<T>(uint id) where T : struct {
+    public void Remove<T>(u32 id) where T : struct {
         int cid = Component.Lookup<T>.Info.Id;
         if (cid < componentStores.Length && componentStores[cid] != null && Has<T>(id))
         {
@@ -178,10 +178,10 @@ public sealed partial class World : IDisposable {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Has<T>(uint id) where T : struct => Masks[id].IsSet(Component.GetId<T>());
+    public bool Has<T>(u32 id) where T : struct => Masks[id].IsSet(Component.GetId<T>());
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void Grow(uint min) {
+    private void Grow(u32 min) {
         lock (layoutLock) {
             if (min < Generations.Length) return;
 

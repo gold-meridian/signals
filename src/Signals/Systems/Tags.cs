@@ -4,11 +4,11 @@ using System.Numerics;
 namespace Signals.Systems;
 
 public readonly struct Tag : IEquatable<Tag> {
-    public readonly uint Id;
+    public readonly u32 Id;
 
     public bool IsValid => Id != 0;
 
-    internal Tag(uint id) => Id = id;
+    internal Tag(u32 id) => Id = id;
 
     public bool Equals(Tag other) => Id == other.Id;
     public override bool Equals(object? obj) => obj is Tag other && Equals(other);
@@ -22,19 +22,19 @@ public static class Tags {
     internal struct Data {
         public string Name;
         public SystemHandle[] Systems;
-        public uint SystemCount;
+        public u32 SystemCount;
     }
 
     private static readonly ConcurrentDictionary<string, uint> tagIdsByString = new(StringComparer.Ordinal);
     private static Data[] tagDataById = new Data[64];
-    private static uint tagCount = 0;
+    private static u32 tagCount = 0;
 
-    public static uint Count => tagCount;
+    public static u32 Count => tagCount;
     
     public static string GetName(Tag tag) => tagDataById[tag.Id].Name;
 
     public static Tag GetOrCreate(string name) {
-        if (tagIdsByString.TryGetValue(name, out uint id))
+        if (tagIdsByString.TryGetValue(name, out u32 id))
             return new Tag(id);
 
         var data = new Data {
@@ -62,7 +62,7 @@ public static class Tags {
 
     internal static void AddSystem(Tag tag, SystemHandle system) {
         ref var data = ref tagDataById[tag.Id];
-        uint index = data.SystemCount++;
+        u32 index = data.SystemCount++;
 
         if (index >= data.Systems.Length)
             Array.Resize(ref data.Systems, 

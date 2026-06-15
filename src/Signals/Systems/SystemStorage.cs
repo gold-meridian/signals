@@ -7,8 +7,8 @@ namespace Signals.Systems;
 ///     A unique handle assigned to a registered system,
 ///     providing providing access to its description.
 /// </summary>
-public readonly struct SystemHandle(uint id) {
-    public readonly uint Id = id;
+public readonly struct SystemHandle(u32 id) {
+    public readonly u32 Id = id;
     public bool IsValid => Id != 0;
     
     public ref readonly SystemDescription Description => ref SystemStorage.GetDescription(this);
@@ -147,9 +147,9 @@ public struct SystemDescription() {
 internal static class SystemStorage {
     private static SystemDescription[] descriptions = new SystemDescription[64];
     private static Dictionary<MethodInfo, SystemHandle> systemsByMethod = new();
-    private static uint systemCount = 0;
+    private static u32 systemCount = 0;
 
-    public static uint SystemCount => systemCount;
+    public static u32 SystemCount => systemCount;
 
     public static ref SystemDescription GetDescription(SystemHandle handle) => ref descriptions[handle.Id];
 
@@ -159,7 +159,7 @@ internal static class SystemStorage {
         => TryGetSystem(method, out var result) ? result : throw new InvalidOperationException($"system not found for method {method.Name}!");
 
     internal static void Register(ref SystemDescription description, MethodInfo method) {
-        uint id = ++systemCount;
+        u32 id = ++systemCount;
         var handle = new SystemHandle(id);
         description.Handle = handle;
 
