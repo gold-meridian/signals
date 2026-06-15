@@ -32,6 +32,12 @@ unsafe partial class Program {
             .WithTag("IncrementEntities")
             .Build();
         
+        app
+            .AddSystem(KillOldEntities)
+            .InCallback<Update>()
+            .After("IncrementEntities")
+            .Build();
+        
         app.RunCallback<Initialize>();
 
         for(var i = 0; i < 4; i++) {
@@ -55,5 +61,12 @@ unsafe partial class Program {
         age.Frames += 1;
         
         Console.WriteLine($"entity #{entity.Id} is now {age.Frames} frames old!");
+    }
+    
+    [System]
+    static partial void KillOldEntities(Commands cmds, Entity entity, ref Age age) {
+        if(age.Frames == 4) {
+            entity.Destroy();
+        } 
     }
 }

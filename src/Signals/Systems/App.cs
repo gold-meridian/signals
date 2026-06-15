@@ -50,8 +50,7 @@ public sealed class App {
         if (!callbacks.TryGetValue(callbackType, out var systems))
             return;
 
-        var commands = new Commands();
-        commands.Fetch(world);
+        var commands = world.AcquireCommandBuffer();
 
         var ordered = Sort(systems);
 
@@ -62,6 +61,8 @@ public sealed class App {
             system.Function.Execute(world, commands);
             commands.Apply();
         }
+        
+        world.ReleaseCommandBuffer(commands);
     }
 
     private List<SystemDescription> Sort(List<SystemDescription> systems) {
