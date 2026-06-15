@@ -115,7 +115,7 @@ public readonly unsafe struct Entity(uint id, ushort generation, ushort world) {
 
                 for (int i = 0; i < Signals.Component.Count; i++) {
                     if (mask.IsSet(i)) {
-                        var type = Component.GetType(i);
+                        var type = Component.GetInfo(i).Type;
                         var data = target.GetDebug(type);
                         if (data != null) 
                             components[type] = data;

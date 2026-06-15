@@ -1,0 +1,34 @@
+﻿namespace Signals.Core.Utils;
+
+/// <summary>
+///     Thread-unsafe object pool
+/// </summary>
+public class Pool<T> where T : new() {
+    [ThreadStatic] static Pool<T>? shared;
+    public static FactoryDelegate? Factory;
+
+    public static Pool<T> Shared => shared ??= new Pool<T>(Factory ?? (() => new()), 16);
+
+    public delegate T FactoryDelegate();
+
+    readonly FactoryDelegate factory;
+    readonly Stack<T> open;
+
+    public Pool(FactoryDelegate factory, int capacity) {
+        this.factory = factory;
+        open = new Stack<T>(capacity);
+        for (int i = 0; i < capacity; i++)
+        {
+            open.Push(factory());
+        }
+    }
+
+    public T Rent() {
+        if (open.TryPop(out var item)) return item;
+        return factory();
+    }
+
+    public void Return(T item) {
+        open.Push(item);
+    }
+}

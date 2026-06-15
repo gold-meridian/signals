@@ -25,6 +25,8 @@ unsafe partial class Program {
             Console.WriteLine($"entity with id {entity.Id} created");
         }
         
+        Console.WriteLine(Component.Lookup<Age>.Info.TypeName);
+        
         app
             .AddSystem(AgeAllEntities)
             .InStage(stage: Stage.Update)

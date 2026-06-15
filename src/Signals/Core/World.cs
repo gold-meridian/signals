@@ -1,4 +1,5 @@
 ﻿using Signals.Core;
+using Signals.Core.Utils;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Numerics;
@@ -6,44 +7,64 @@ using System.Runtime.CompilerServices;
 
 namespace Signals;
 
-[DebuggerDisplay("ID: {Id}, Size: {Size}")]
-public readonly struct ComponentInfo {
-    public readonly int Id;
-    public readonly int Size;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ComponentInfo(int id, int size) {
-        Id = id;
-        Size = size;
-    }
-}
-
 public static partial class Component {
-    public static class Lookup<T> where T : struct {
-        public static readonly ComponentInfo Info = new(GetId<T>(), Unsafe.SizeOf<T>());
+    [DebuggerDisplay("ID: {Id}, Size: {Size}")]
+    public readonly record struct Info(int Id, int Size, Type Type, string TypeName) {
+        public static implicit operator int(Info cid) => cid.Id;
     }
     
-    private static int nextId = 0;  
-    private static readonly Dictionary<Type, int> indices = new();
-    private static Type[] idToType = new Type[64];
-    
-    public static int Count => nextId;
-    
-    public static int GetId<T>() where T : struct => GetId(typeof(T));
+    public static class Lookup<T> where T : struct {
+        public static readonly Info Info;
 
-    public static int GetId(Type type) {
-        lock (indices) {
-            if (indices.TryGetValue(type, out int id)) return id;
-            
-            if (nextId >= idToType.Length) 
-                Array.Resize(ref idToType, idToType.Length * 2);
-            
-            idToType[nextId] = type;
-            return indices[type] = nextId++;
+        static Lookup() {
+            Info = new(GetId<T>(), Unsafe.SizeOf<T>(), typeof(T), typeof(T).Name);
         }
     }
     
-    public static Type GetType(int id) => idToType[id];
+    private static int nextId = 0;
+    private static readonly ConcurrentDictionary<Type, int> typeToId = new();
+    private static readonly ConcurrentDictionary<int, Info> infoById = new();
+    
+    private static Info Register<T>() where T : struct {
+        var type = typeof(T);
+        
+        if (typeToId.TryGetValue(type, out int cachedId))
+            return infoById[cachedId];
+
+        lock (typeToId) {
+            if (typeToId.TryGetValue(type, out cachedId))
+                return infoById[cachedId];
+
+            int id = nextId++;
+            var info = new Info(id, Unsafe.SizeOf<T>(), type, type.Name);
+
+            typeToId[type] = id;
+            infoById[id] = info;
+            return info;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int GetId<T>() where T : struct => Lookup<T>.Info.Id;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Info GetInfo<T>() where T : struct => Lookup<T>.Info;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Info GetInfo(int id) {
+        if (!infoById.TryGetValue(id, out var info))
+            throw new KeyNotFoundException($"component id {id} not registered!");
+        return info;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Info GetInfo(Type type) {
+        if (!typeToId.TryGetValue(type, out int id) || !infoById.TryGetValue(id, out var info)) throw new KeyNotFoundException($"component {type.Name} not registered!");
+        
+        return info;
+    }
+
+    public static int Count => nextId;
 }
 
 public sealed partial class World : IDisposable {
@@ -61,6 +82,9 @@ public sealed partial class World : IDisposable {
     private static int worldIdCounter = 0;
     
     private readonly object layoutLock = new();
+
+    private readonly Queue<Commands> cmdBuffersQueue;
+    private readonly Pool<Commands> cmdBuffers;
 
     public World() {
         Id = (ushort)Interlocked.Increment(ref worldIdCounter);

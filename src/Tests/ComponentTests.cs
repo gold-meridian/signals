@@ -17,6 +17,8 @@ public class ComponentTests {
 
     [Test]
     public void Test_ComponentGenericIdSame() {
-        Assert.That(Component.GetId<Struct1>(), Is.EqualTo(Component.GetId(typeof(Struct1))));
+        var id = Component.GetId<Struct1>();
+        
+        Assert.That(Component.GetId<Struct1>(), Is.EqualTo(Component.GetInfo(id).Id));
     }
 }
