@@ -5,6 +5,7 @@ namespace Signals;
 
 internal readonly struct Command {
     internal enum CommandKind : byte {
+        Spawn,
         Despawn,
         InsertComponent,
         RemoveComponent,
@@ -23,6 +24,9 @@ internal readonly struct Command {
         ComponentId = componentId;
         ComponentData = data;
     }
+    
+    public static Command Spawn(Entity entity)
+        => new(CommandKind.Spawn, entity.Id, entity.Generation);
 
     public static Command Despawn(Entity entity)
         => new(CommandKind.Despawn, entity.Id, entity.Generation);
@@ -48,22 +52,36 @@ public sealed class Commands {
     internal void Apply() {
         if (world == null) return;
 
-        for (i32 i = 0; i < commands.Count; i++) {
+        for (var i = 0; i < commands.Count; i++) {
+            var cmd = commands[i];
+            if (cmd.Kind == Command.CommandKind.Spawn) {
+                world.Activate(cmd.EntityId);
+            }
+        }
+
+        for (int i = 0; i < commands.Count; i++) {
             var cmd = commands[i];
 
-            if (!world.IsValid(cmd.EntityId, cmd.Generation)) continue;
-
             switch (cmd.Kind) {
+                case Command.CommandKind.Spawn:
+                    break;
+
                 case Command.CommandKind.Despawn:
-                    world.Destroy(cmd.EntityId, cmd.Generation);
+                    if (world.IsValid(cmd.EntityId, cmd.Generation)) {
+                        world.Destroy(cmd.EntityId, cmd.Generation);
+                    }
                     break;
 
                 case Command.CommandKind.InsertComponent:
-                    ExecuteInsert(cmd);
+                    if (world.IsValid(cmd.EntityId, cmd.Generation)) {
+                        ExecuteInsert(cmd);
+                    }
                     break;
 
                 case Command.CommandKind.RemoveComponent:
-                    ExecuteRemove(cmd);
+                    if (world.IsValid(cmd.EntityId, cmd.Generation)) {
+                        ExecuteRemove(cmd);
+                    }
                     break;
             }
         }
@@ -98,7 +116,8 @@ public sealed class Commands {
         if (world == null)
             throw new InvalidOperationException("commands not initialized");
 
-        var entity = world.Create();
+        var entity = world.ReserveId();
+        QueueCommand(Command.Spawn(entity));
         return new EntityCommands(this, entity);
     }
 

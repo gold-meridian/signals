@@ -113,18 +113,27 @@ public sealed partial class World : IDisposable {
     internal void ReleaseCommandBuffer(Commands buffer) {
         availableBuffers.Push(buffer);
     }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Entity ReserveId() {
+        var id = freeIds.TryPop(out var freeId) ? freeId : Interlocked.Increment(ref nextId) - 1;
+        if (id >= Generations.Length) Grow(id);
+
+        Generations[id]++;
+
+        return new Entity((uint)id, Generations[id], Id);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Activate(u32 id) {
+        Masks[id] = default;
+        PresenceMask.Set((int)id);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Entity Create() {
-        var id = freeIds.TryPop(out var freeId) ? freeId : Interlocked.Increment(ref nextId) - 1;
-        if (id >= Generations.Length) Grow(id);
-        
-        Generations[id]++;
-        Masks[id] = default;
-        PresenceMask.Set((int)id);
-
-        var entity = new Entity((uint)id, Generations[id], Id);
-        
+        var entity = ReserveId();
+        Activate(entity.Id);
         return entity;
     }
 
