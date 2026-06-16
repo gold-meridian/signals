@@ -48,12 +48,12 @@ unsafe partial class Program {
     [System]
     static partial void SpawnSomeEntities(Commands cmds) {
         for(var i = 0; i < entity_count; i++) {
-            cmds
+            var e = cmds
                 .Spawn()
-                .Set(new Age());
+                .Set(new Age()).Entity;
+            
+                Console.WriteLine($"spawned entity with id {e.Id}");   
         }
-        
-        Console.WriteLine("spawned entities");
     }
     
     [System]

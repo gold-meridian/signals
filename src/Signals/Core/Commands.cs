@@ -3,182 +3,143 @@ using System.Runtime.CompilerServices;
 
 namespace Signals;
 
-public readonly struct EntityIdOnly {
-    public readonly int SpawnIndex;
-    public readonly u32 EntityId;
-
-    public EntityIdOnly(int spawnIndex) {
-        SpawnIndex = spawnIndex;
-        EntityId = 0;
-    }
-
-    public EntityIdOnly(u32 entityId) {
-        SpawnIndex = -1;
-        EntityId = entityId;
-    }
-
-    public bool IsSpawned => SpawnIndex >= 0;
-}
-
 internal readonly struct Command {
     internal enum CommandKind : byte {
-        Spawn,
         Despawn,
         InsertComponent,
         RemoveComponent,
     }
     
     public readonly CommandKind Kind;
-    public readonly EntityIdOnly EntityIdOnly;
-    public readonly int ComponentId;
+    public readonly u32 EntityId;
+    public readonly u16 Generation;
+    public readonly i32 ComponentId;
     public readonly object? ComponentData;
 
-    private Command(CommandKind kind, EntityIdOnly entityIdOnly, int componentId = -1, object? data = null) {
+    private Command(CommandKind kind, u32 entityId, u16 generation, i32 componentId = -1, object? data = null) {
         Kind = kind;
-        EntityIdOnly = entityIdOnly;
+        EntityId = entityId;
+        Generation = generation;
         ComponentId = componentId;
         ComponentData = data;
     }
 
-    public static Command Spawn(int spawnIndex) 
-        => new(CommandKind.Spawn, new(spawnIndex));
+    public static Command Despawn(Entity entity)
+        => new(CommandKind.Despawn, entity.Id, entity.Generation);
 
-    public static Command Despawn(EntityIdOnly entityIdOnly) 
-        => new(CommandKind.Despawn, entityIdOnly);
+    public static Command InsertComponent<T>(Entity entity, in T component) where T : struct
+        => new(CommandKind.InsertComponent, entity.Id, entity.Generation, Component.GetId<T>(), (object)component);
 
-    public static Command InsertComponent<T>(EntityIdOnly entityIdOnly, in T component) where T : struct 
-        => new(CommandKind.InsertComponent, entityIdOnly, Component.GetId<T>(), (object)component);
-
-    public static Command RemoveComponent<T>(EntityIdOnly entityIdOnly) where T : struct
-        => new(CommandKind.RemoveComponent, entityIdOnly, Component.GetId<T>());
+    public static Command RemoveComponent<T>(Entity entity) where T : struct
+        => new(CommandKind.RemoveComponent, entity.Id, entity.Generation, Component.GetId<T>());
 }
 
 public sealed class Commands {
     private World? world;
     private readonly List<Command> commands = new(256);
-    private readonly List<Command> spawnCommands = new(64);
-    private uint[] spawnedEntityIds = new uint[256];
-    private int spawnedEntityCount = 0;
 
     public bool IsInitialized => world != null;
 
     public void Fetch(World world) {
         this.world = world;
         commands.Clear();
-        spawnCommands.Clear();
-        Array.Clear(spawnedEntityIds, 0, spawnedEntityCount);
-        spawnedEntityCount = 0;
     }
 
     internal void Apply() {
         if (world == null) return;
 
-        for (int i = 0; i < spawnCommands.Count; i++) {
-            var cmd = spawnCommands[i];
-            var entity = world.Create();
-            spawnedEntityIds[cmd.EntityIdOnly.SpawnIndex] = entity.Id;
-        }
-
-        for (int i = 0; i < commands.Count; i++) {
+        for (i32 i = 0; i < commands.Count; i++) {
             var cmd = commands[i];
 
-            var entityId = ResolveEntityId(cmd.EntityIdOnly);
-            if (!world.Exists(entityId)) continue;
+            if (!world.IsValid(cmd.EntityId, cmd.Generation)) continue;
 
             switch (cmd.Kind) {
                 case Command.CommandKind.Despawn:
-                    world.Destroy(
-                        entityId,
-                        world.Generations[entityId]
-                    );
+                    world.Destroy(cmd.EntityId, cmd.Generation);
                     break;
 
                 case Command.CommandKind.InsertComponent:
-                    ExecuteInsert(cmd, entityId);
+                    ExecuteInsert(cmd);
                     break;
 
                 case Command.CommandKind.RemoveComponent:
-                    ExecuteRemove(cmd, entityId);
+                    ExecuteRemove(cmd);
                     break;
             }
         }
 
         commands.Clear();
-        spawnCommands.Clear();
     }
 
-    private void ExecuteInsert(Command cmd, uint entityId) {
+    private void ExecuteInsert(Command cmd) {
         var info = Component.GetInfo(cmd.ComponentId);
         var method = typeof(Commands)
-            .GetMethod(
-                nameof(ExecuteInsertGeneric),
-                System.Reflection.BindingFlags.NonPublic |
-                System.Reflection.BindingFlags.Instance
-            )!
+            .GetMethod(nameof(ExecuteInsertGeneric), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .MakeGenericMethod(info.Type);
 
-        method.Invoke(this, new[] { cmd.ComponentData, entityId });
+        method.Invoke(this, new[] { cmd.ComponentData, cmd.EntityId });
     }
 
-    private void ExecuteInsertGeneric<T>(object data, uint entityId) where T : struct {
+    private void ExecuteInsertGeneric<T>(object data, u32 entityId)
+        where T : struct {
         world!.Set(entityId, (T)data);
     }
 
-    private void ExecuteRemove(Command cmd, uint entityId) {
+    private void ExecuteRemove(Command cmd) {
         var info = Component.GetInfo(cmd.ComponentId);
         var method = typeof(World)
-            .GetMethod(
-                nameof(World.Remove),
-                System.Reflection.BindingFlags.Public |
-                System.Reflection.BindingFlags.Instance
-            )!
+            .GetMethod(nameof(World.Remove), System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)!
             .MakeGenericMethod(info.Type);
 
-        method.Invoke(world, new object[] { entityId });
+        method.Invoke(world, new object[] { cmd.EntityId });
     }
 
     public EntityCommands Spawn() {
-        int spawnIndex = spawnedEntityCount++;
-        if (spawnIndex >= spawnedEntityIds.Length) {
-            Array.Resize(ref spawnedEntityIds, Math.Max(spawnIndex + 1, spawnedEntityIds.Length * 2));
-        }
+        if (world == null)
+            throw new InvalidOperationException("commands not initialized");
 
-        spawnCommands.Add(Command.Spawn(spawnIndex));
-        return new EntityCommands(this, new EntityIdOnly(spawnIndex));
+        var entity = world.Create();
+        return new EntityCommands(this, entity);
     }
 
-    public EntityCommands Entity(uint entityId) {
-        return new EntityCommands(this, new EntityIdOnly(entityId));
+    public EntityCommands Entity(Entity entity) {
+        return new EntityCommands(this, entity);
+    }
+
+    public EntityCommands Entity(u32 entityId) {
+        if (world == null)
+            throw new InvalidOperationException("commands not initialized");
+
+        var entity = new Entity(
+            entityId,
+            world.Generations[entityId],
+            world.Id
+        );
+        return new EntityCommands(this, entity);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void QueueCommand(Command cmd) {
         commands.Add(cmd);
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal uint ResolveEntityId(in EntityIdOnly entityIdOnly) {
-        return entityIdOnly.IsSpawned
-            ? spawnedEntityIds[entityIdOnly.SpawnIndex]
-            : entityIdOnly.EntityId;
-    }
 }
 
-public readonly ref struct EntityCommands(Commands commands, EntityIdOnly entityIdOnly ) {
+public readonly ref struct EntityCommands(Commands commands, Entity entity) {
     private readonly Commands commands = commands;
-    private readonly EntityIdOnly entityIdOnly = entityIdOnly;
+    public readonly Entity Entity = entity;
 
-    public readonly EntityCommands Set<T>(T component) where T : struct {
-        commands.QueueCommand(Command.InsertComponent(entityIdOnly, in component));
+    public readonly EntityCommands Set<T>(T component)
+        where T : struct {
+        commands.QueueCommand(Command.InsertComponent(Entity, in component));
         return this;
     }
 
     public readonly EntityCommands Remove<T>() where T : struct {
-        commands.QueueCommand(Command.RemoveComponent<T>(entityIdOnly));
+        commands.QueueCommand(Command.RemoveComponent<T>(Entity));
         return this;
     }
 
     public readonly void Despawn() {
-        commands.QueueCommand(Command.Despawn(entityIdOnly));
+        commands.QueueCommand(Command.Despawn(Entity));
     }
 }
