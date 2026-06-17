@@ -336,11 +336,11 @@ internal static class SystemRegistration
         writer.WriteLine($"[GeneratedSystemBinding({queryId})]");
 
         var returnType = method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        // var accessibility = GetAccessibility(method.DeclaredAccessibility);
+        //var accessibility = GetAccessibility(method.DeclaredAccessibility);
         var parameters = string.Join(", ", method.Parameters.Select(GetParameterDeclaration));
 
-        // writer.WriteLine($"{accessibility} partial {returnType} {method.Name}({parameters});");
-        writer.WriteLine($"{staticText}partial {returnType} {method.Name}({parameters});");
+        //writer.WriteLine($"{accessibility} partial {returnType} {method.Name}({parameters});");
+        writer.WriteLine($"public {staticText}partial {returnType} {method.Name}({parameters});");
     }
 
     private static void EmitDelegates(IndentedStringWriter writer, SystemDescriptor[] systems)
