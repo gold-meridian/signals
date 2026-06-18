@@ -18,7 +18,8 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
     public readonly Bitset256 ExcludedMask = ex;
 
     public EntityQuery With<T>() where T : struct {
-        var r = RequiredMask; r.Set(Component.Lookup<T>.Info.Id);
+        var r = RequiredMask; 
+        r.Set(Component.Lookup<T>.Info.Id);
         return new EntityQuery(world, r, ExcludedMask);
     }
 

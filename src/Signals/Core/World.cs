@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 
 namespace Signals;
 
-public static partial class Component {
+public static class Component {
     [DebuggerDisplay("ID: {Id}, Size: {Size}")]
     public readonly record struct Info(i32 Id, i32 Size, Type Type, string TypeName) {
         public static implicit operator i32(Info cid) => cid.Id;
@@ -21,7 +21,7 @@ public static partial class Component {
         }
     }
     
-    private static i32 nextId = 0;
+    private static i32 nextId;
     private static readonly ConcurrentDictionary<Type, i32> typeToId = new();
     private static readonly ConcurrentDictionary<i32, Info> infoById = new();
     
@@ -121,7 +121,7 @@ public sealed partial class World : IDisposable {
 
         Generations[id]++;
 
-        return new Entity((uint)id, Generations[id], Id);
+        return new Entity(id, Generations[id], Id);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
