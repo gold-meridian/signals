@@ -15,7 +15,7 @@ public struct ComponentMask {
         int bucket = componentId >> 8;
         int bit = componentId & 0xFF;
         
-        if (bucket >= (buckets?.Length ?? 0)) {
+        if (buckets == null || bucket >= buckets.Length) {
             Array.Resize(ref buckets, bucket + 1);
         }
         
@@ -27,7 +27,7 @@ public struct ComponentMask {
         int bucket = componentId >> 8;
         int bit = componentId & 0xFF;
         
-        if (bucket < (buckets?.Length ?? 0)) {
+        if (buckets != null && bucket < buckets.Length) {
             buckets[bucket].Clear(bit);
         }
     }
@@ -36,33 +36,31 @@ public struct ComponentMask {
     public bool IsSet(int componentId) {
         int bucket = componentId >> 8;
         int bit = componentId & 0xFF;
-        return bucket < (buckets?.Length ?? 0) &&
+        return buckets != null && 
+               bucket < buckets.Length && 
                buckets[bucket].IsSet(bit);
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Contains(ComponentMask other) {
-        if (other.buckets == null) return true;
         if (buckets == null) return false;
         
         for (int i = 0; i < other.buckets.Length; i++) {
             if (i >= buckets.Length) return false;
-            if (!buckets[i].Contains(other.buckets[i])) {
+            if (!buckets[i].Contains(other.buckets[i])) 
                 return false;
-            }
         }
         return true;
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool AndAny(ComponentMask other) {
-        if (buckets == null || other.buckets == null) return false;
+        if (buckets == null) return false;
         
         int len = Math.Min(buckets.Length, other.buckets.Length);
         for (int i = 0; i < len; i++) {
-            if (buckets[i].AndAny(other.buckets[i])) {
+            if (buckets[i].AndAny(other.buckets[i])) 
                 return true;
-            }
         }
         return false;
     }
