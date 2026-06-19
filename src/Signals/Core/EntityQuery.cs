@@ -12,10 +12,10 @@ public sealed class WithAttribute<T> : Attribute where T : struct;
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class WithoutAttribute<T> : Attribute where T : struct;
 
-public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
+public readonly struct EntityQuery(World world, ComponentMask req, ComponentMask ex) {
     private readonly World world = world;
-    public readonly Bitset256 RequiredMask = req;
-    public readonly Bitset256 ExcludedMask = ex;
+    public readonly ComponentMask RequiredMask = req;
+    public readonly ComponentMask ExcludedMask = ex;
 
     public EntityQuery With<T>() where T : struct {
         var r = RequiredMask; 
@@ -33,10 +33,10 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
 
     public unsafe ref struct Iterator {
         private readonly World world;
-        private readonly Bitset256 required;
-        private readonly Bitset256 excluded;
+        private readonly ComponentMask required;
+        private readonly ComponentMask excluded;
         private readonly Bitset256[] presenceMask;
-        private readonly Bitset256* maskPtr;
+        private readonly ComponentMask* maskPtr;
         private readonly ushort* generationPtr;
 
         private int chunkIndex;
@@ -48,7 +48,7 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
             required = q.RequiredMask;
             excluded = q.ExcludedMask;
             presenceMask = world.PresenceMask.Array ?? Array.Empty<Bitset256>();
-            maskPtr = (Bitset256*)Unsafe.AsPointer(ref world.Masks[0]);
+            maskPtr = (ComponentMask*)Unsafe.AsPointer(ref world.Masks[0]);
             generationPtr = (ushort*)Unsafe.AsPointer(ref world.Generations[0]);
             chunkIndex = 0;
             index = -1;
@@ -61,7 +61,8 @@ public readonly struct EntityQuery(World world, Bitset256 req, Bitset256 ex) {
                 int bit = currentChunk.FirstSetBit();
                 if (bit >= Bitset256.CAPACITY) {
                     chunkIndex++;
-                    if (chunkIndex < presenceMask.Length) currentChunk = presenceMask[chunkIndex];
+                    if (chunkIndex < presenceMask.Length) 
+                        currentChunk = presenceMask[chunkIndex];
                     continue;
                 }
 

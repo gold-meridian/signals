@@ -1,11 +1,108 @@
 ﻿using Signals.Core;
 using Signals.Core.Utils;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Signals;
+
+public struct ComponentMask : IEnumerable<i32> {
+    private Bitset256 bucket0;
+    private Bitset256 bucket1;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Set(i32 componentId) {
+        i32 bucket = componentId >> 8; // div 256
+        i32 bit = componentId & 0xFF;  // mod 256
+        
+        if (bucket == 0) {
+            bucket0.Set(bit);
+        } else if (bucket == 1) {
+            bucket1.Set(bit);
+        } else {
+            ThrowComponentOverflow(componentId);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Clear(i32 componentId) {
+        i32 bucket = componentId >> 8;
+        i32 bit = componentId & 0xFF;
+        
+        if (bucket == 0) {
+            bucket0.Clear(bit);
+        } else if (bucket == 1) {
+            bucket1.Clear(bit);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsSet(i32 componentId) {
+        i32 bucket = componentId >> 8;
+        i32 bit = componentId & 0xFF;
+        
+        if (bucket == 0) return bucket0.IsSet(bit);
+        if (bucket == 1) return bucket1.IsSet(bit);
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Contains(in ComponentMask other) {
+        return bucket0.Contains(in other.bucket0) 
+               && bucket1.Contains(in other.bucket1);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool AndAny(in ComponentMask other) {
+        return bucket0.AndAny(in other.bucket0) 
+               || bucket1.AndAny(in other.bucket1);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Union(in ComponentMask other) {
+        bucket0 |= other.bucket0;
+        bucket1 |= other.bucket1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Intersect(in ComponentMask other) {
+        bucket0 &= other.bucket0;
+        bucket1 &= other.bucket1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int PopCount() {
+        return bucket0.PopCount() + bucket1.PopCount();
+    }
+
+    public bool Intersects(in ComponentMask other) => AndAny(in other);
+
+    public bool IsEmpty => bucket0.IsZero && bucket1.IsZero;
+
+    public readonly ComponentMask Clone() => this;
+
+    public void Reset() {
+        bucket0 = Bitset256.Zero;
+        bucket1 = Bitset256.Zero;
+    }
+
+    public IEnumerator<i32> GetEnumerator() {
+        foreach (i32 bit in bucket0) {
+            yield return bit;
+        }
+        foreach (i32 bit in bucket1) {
+            yield return 256 | bit;
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    [DoesNotReturn]
+    private static void ThrowComponentOverflow(i32 id) => throw new IndexOutOfRangeException($"component index {id} exceeds the component limit!");
+}
 
 public static class Component {
     [DebuggerDisplay("ID: {Id}, Size: {Size}")]
@@ -67,19 +164,19 @@ public static class Component {
     }
 }
 
-public sealed partial class World : IDisposable {
+public sealed class World : IDisposable {
     internal u16[] Generations = new u16[1024];
     private readonly ConcurrentStack<uint> freeIds = new();
-    private u32 nextId = 0;
+    private u32 nextId;
 
     private ISparseSet?[] componentStores = new ISparseSet[Component.Count];
 
-    internal Bitset256[] Masks = new Bitset256[1024];
-    internal BitmaskArray256 PresenceMask = new();
+    internal ComponentMask[] Masks = new ComponentMask[1024];
+    internal BitmaskArray256 PresenceMask;
 
     public static readonly World[] AllWorlds = new World[u16.MaxValue];
     public readonly u16 Id;
-    private static i32 worldIdCounter = 0;
+    private static i32 worldIdCounter;
     
     private readonly object layoutLock = new();
     
@@ -142,11 +239,11 @@ public sealed partial class World : IDisposable {
         if (!IsValid(id, generation)) return;
         
         foreach (int componentId in Masks[id]) {
-            if (componentId < componentStores.Length && componentStores[componentId] != null) {
+            if (componentStores[componentId] != null) {
                 componentStores[componentId]!.Remove((int)id);
             }
         }
-        Masks[id] = default;
+        Masks[id].Reset();
 
         Generations[id]++;
         PresenceMask.Unset((int)id);
