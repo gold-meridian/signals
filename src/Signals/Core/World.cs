@@ -7,6 +7,81 @@ using System.Runtime.CompilerServices;
 
 namespace Signals;
 
+public struct ComponentMask {
+    private Bitset256[] buckets;
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Set(int componentId) {
+        int bucket = componentId >> 8;
+        int bit = componentId & 0xFF;
+        
+        if (bucket >= (buckets?.Length ?? 0)) {
+            Array.Resize(ref buckets, bucket + 1);
+        }
+        
+        buckets[bucket].Set(bit);
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Clear(int componentId) {
+        int bucket = componentId >> 8;
+        int bit = componentId & 0xFF;
+        
+        if (bucket < (buckets?.Length ?? 0)) {
+            buckets[bucket].Clear(bit);
+        }
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsSet(int componentId) {
+        int bucket = componentId >> 8;
+        int bit = componentId & 0xFF;
+        return bucket < (buckets?.Length ?? 0) &&
+               buckets[bucket].IsSet(bit);
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Contains(ComponentMask other) {
+        if (other.buckets == null) return true;
+        if (buckets == null) return false;
+        
+        for (int i = 0; i < other.buckets.Length; i++) {
+            if (i >= buckets.Length) return false;
+            if (!buckets[i].Contains(other.buckets[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool AndAny(ComponentMask other) {
+        if (buckets == null || other.buckets == null) return false;
+        
+        int len = Math.Min(buckets.Length, other.buckets.Length);
+        for (int i = 0; i < len; i++) {
+            if (buckets[i].AndAny(other.buckets[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    public void Reset() {
+        buckets = null;
+    }
+    
+    public IEnumerator<int> GetEnumerator() {
+        if (buckets == null) yield break;
+        
+        for (int b = 0; b < buckets.Length; b++) {
+            foreach (int bit in buckets[b]) {
+                yield return (b << 8) | bit;
+            }
+        }
+    }
+}
+
 public static class Component {
     [DebuggerDisplay("ID: {Id}, Size: {Size}")]
     public readonly record struct Info(i32 Id, i32 Size, Type Type, string TypeName) {
@@ -67,19 +142,19 @@ public static class Component {
     }
 }
 
-public sealed partial class World : IDisposable {
+public sealed class World : IDisposable {
     internal u16[] Generations = new u16[1024];
     private readonly ConcurrentStack<uint> freeIds = new();
-    private u32 nextId = 0;
+    private u32 nextId;
 
     private ISparseSet?[] componentStores = new ISparseSet[Component.Count];
 
-    internal Bitset256[] Masks = new Bitset256[1024];
-    internal BitmaskArray256 PresenceMask = new();
+    internal ComponentMask[] Masks = new ComponentMask[1024];
+    internal BitmaskArray256 PresenceMask;
 
     public static readonly World[] AllWorlds = new World[u16.MaxValue];
     public readonly u16 Id;
-    private static i32 worldIdCounter = 0;
+    private static i32 worldIdCounter;
     
     private readonly object layoutLock = new();
     
@@ -142,11 +217,11 @@ public sealed partial class World : IDisposable {
         if (!IsValid(id, generation)) return;
         
         foreach (int componentId in Masks[id]) {
-            if (componentId < componentStores.Length && componentStores[componentId] != null) {
+            if (componentStores[componentId] != null) {
                 componentStores[componentId]!.Remove((int)id);
             }
         }
-        Masks[id] = default;
+        Masks[id].Reset();
 
         Generations[id]++;
         PresenceMask.Unset((int)id);
