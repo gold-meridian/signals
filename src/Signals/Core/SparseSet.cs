@@ -1,5 +1,6 @@
 ﻿using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Signals;
 
@@ -69,9 +70,7 @@ public sealed class SparseSet<T> : ISparseSet where T : struct {
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public unsafe ref T GetUnsafe(int entityId) {
-        fixed (int* sPtr = _sparse)
-        fixed (T* dPtr = _dense) {
-            return ref dPtr[sPtr[entityId]];
-        }
+        int denseIndex = Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(_sparse), entityId);
+        return ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(_dense), denseIndex);
     }
 }
