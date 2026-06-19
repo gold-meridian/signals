@@ -55,7 +55,6 @@ public readonly struct EntityQuery(World world, ComponentMask req, ComponentMask
             if (presenceMask.Length > 0) currentChunk = presenceMask[0];
         }
 
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Entity? Next() {
             while (chunkIndex < presenceMask.Length) {
@@ -70,10 +69,8 @@ public readonly struct EntityQuery(World world, ComponentMask req, ComponentMask
                 currentChunk.Clear(bit);
                 index = (chunkIndex << 8) + bit;
 
-                if (maskPtr[index].Contains(required) && 
-                    !maskPtr[index].AndAny(excluded)) {
-                    return new Entity((uint)index, generationPtr[index], 
-                        world.Id);
+                if (maskPtr[index].Contains(required) && !maskPtr[index].AndAny(excluded)) {
+                    return new Entity((uint)index, generationPtr[index], world.Id);
                 }
             }
             return null;

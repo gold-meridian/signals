@@ -1,83 +1,107 @@
 ﻿using Signals.Core;
 using Signals.Core.Utils;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Signals;
 
-public struct ComponentMask {
-    private Bitset256[] buckets;
-    
+public struct ComponentMask : IEnumerable<int> {
+    private Bitset256 bucket0;
+    private Bitset256 bucket1;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Set(int componentId) {
-        int bucket = componentId >> 8;
-        int bit = componentId & 0xFF;
+        int bucket = componentId >> 8; // div 256
+        int bit = componentId & 0xFF;  // mod 256
         
-        if (buckets == null || bucket >= buckets.Length) {
-            Array.Resize(ref buckets, bucket + 1);
+        if (bucket == 0) {
+            bucket0.Set(bit);
+        } else if (bucket == 1) {
+            bucket1.Set(bit);
+        } else {
+            ThrowComponentOverflow(componentId);
         }
-        
-        buckets[bucket].Set(bit);
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Clear(int componentId) {
         int bucket = componentId >> 8;
         int bit = componentId & 0xFF;
         
-        if (buckets != null && bucket < buckets.Length) {
-            buckets[bucket].Clear(bit);
+        if (bucket == 0) {
+            bucket0.Clear(bit);
+        } else if (bucket == 1) {
+            bucket1.Clear(bit);
         }
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsSet(int componentId) {
         int bucket = componentId >> 8;
         int bit = componentId & 0xFF;
-        return buckets != null && 
-               bucket < buckets.Length && 
-               buckets[bucket].IsSet(bit);
-    }
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Contains(ComponentMask other) {
-        if (buckets == null) return false;
         
-        for (int i = 0; i < other.buckets.Length; i++) {
-            if (i >= buckets.Length) return false;
-            if (!buckets[i].Contains(other.buckets[i])) 
-                return false;
-        }
-        return true;
-    }
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool AndAny(ComponentMask other) {
-        if (buckets == null) return false;
-        
-        int len = Math.Min(buckets.Length, other.buckets.Length);
-        for (int i = 0; i < len; i++) {
-            if (buckets[i].AndAny(other.buckets[i])) 
-                return true;
-        }
+        if (bucket == 0) return bucket0.IsSet(bit);
+        if (bucket == 1) return bucket1.IsSet(bit);
         return false;
     }
-    
-    public void Reset() {
-        buckets = null;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Contains(in ComponentMask other) {
+        return bucket0.Contains(in other.bucket0) && 
+               bucket1.Contains(in other.bucket1);
     }
-    
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool AndAny(in ComponentMask other) {
+        return bucket0.AndAny(in other.bucket0) || 
+               bucket1.AndAny(in other.bucket1);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Union(in ComponentMask other) {
+        bucket0 |= other.bucket0;
+        bucket1 |= other.bucket1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Intersect(in ComponentMask other) {
+        bucket0 &= other.bucket0;
+        bucket1 &= other.bucket1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int PopCount() {
+        return bucket0.PopCount() + bucket1.PopCount();
+    }
+
+    public bool Intersects(in ComponentMask other) => AndAny(in other);
+
+    public bool IsEmpty => bucket0.IsZero && bucket1.IsZero;
+
+    public readonly ComponentMask Clone() => this;
+
+    public void Reset() {
+        bucket0 = Bitset256.Zero;
+        bucket1 = Bitset256.Zero;
+    }
+
     public IEnumerator<int> GetEnumerator() {
-        if (buckets == null) yield break;
-        
-        for (int b = 0; b < buckets.Length; b++) {
-            foreach (int bit in buckets[b]) {
-                yield return (b << 8) | bit;
-            }
+        foreach (int bit in bucket0) {
+            yield return bit;
+        }
+        foreach (int bit in bucket1) {
+            yield return 256 | bit;
         }
     }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    [DoesNotReturn]
+    private static void ThrowComponentOverflow(int id) => throw new IndexOutOfRangeException($"component index {id} exceeds the component limit!");
 }
 
 public static class Component {

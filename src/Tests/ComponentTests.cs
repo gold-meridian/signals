@@ -29,21 +29,20 @@ public class ComponentMaskBucketTests {
     [Test]
     public void ComponentMask_BoundaryBetweenBuckets() {
         var mask = new ComponentMask();
-            
-        // 255 is bucket 0, 256 is bucket 1
+        
+        //255 is bucket0, 256 goes into bucket1, 511 is the end of bucket1
         mask.Set(255);
         mask.Set(256);
         mask.Set(511);
-        mask.Set(512);
             
         Assert.That(mask.IsSet(255), Is.True);
         Assert.That(mask.IsSet(256), Is.True);
         Assert.That(mask.IsSet(511), Is.True);
-        Assert.That(mask.IsSet(512), Is.True);
             
         mask.Clear(256);
         Assert.That(mask.IsSet(255), Is.True);
         Assert.That(mask.IsSet(256), Is.False);
+        Assert.Throws<System.IndexOutOfRangeException>(() => mask.Set(512));
     }
         
     [Test]
@@ -67,17 +66,17 @@ public class ComponentMaskBucketTests {
         var mask1 = new ComponentMask();
         var mask2 = new ComponentMask();
             
-        mask1.Set(100);  // bucket 0
-        mask1.Set(300);  // bucket 1
-        mask1.Set(600);  // bucket 2
+        mask1.Set(100);  // bucket0
+        mask1.Set(300);  // bucket1
+        mask1.Set(450);  // bucket1
             
-        mask2.Set(100);  // bucket 0
-        mask2.Set(300);  // bucket 1
+        mask2.Set(100);  // bucket0
+        mask2.Set(300);  // bucket1
             
         Assert.That(mask1.Contains(mask2), Is.True);
         Assert.That(mask2.Contains(mask1), Is.False);
             
-        mask2.Set(700);  // bucket 2, different bit
+        mask2.Set(500);  // bucket1, valid bit but missing from mask1
         Assert.That(mask1.Contains(mask2), Is.False);
     }
 
@@ -103,15 +102,15 @@ public class ComponentMaskBucketTests {
         var mask1 = new ComponentMask();
         var mask2 = new ComponentMask();
             
-        mask1.Set(100);  // bucket 0
-        mask1.Set(350);  // bucket 1
+        mask1.Set(100);  // bucket0
+        mask1.Set(350);  // bucket1
             
-        mask2.Set(400);  // bucket 1
-        mask2.Set(600);  // bucket 2
+        mask2.Set(400);  // bucket1
+        mask2.Set(200);  // bucket0
             
         Assert.That(mask1.AndAny(mask2), Is.False);
             
-        mask2.Set(350);  // overlap in bucket 1
+        mask2.Set(350);  // overlap in bucketsp1
         Assert.That(mask1.AndAny(mask2), Is.True);
     }
 
@@ -121,13 +120,13 @@ public class ComponentMaskBucketTests {
             
         mask.Set(100);
         mask.Set(300);
-        mask.Set(500);
+        mask.Set(450);
             
         mask.Reset();
             
         Assert.That(mask.IsSet(100), Is.False);
         Assert.That(mask.IsSet(300), Is.False);
-        Assert.That(mask.IsSet(500), Is.False);
+        Assert.That(mask.IsSet(450), Is.False);
     }
 }
     
@@ -179,8 +178,7 @@ public class WorldBucketIntegrationTests {
             
         world.Destroy(entity.Id, entity.Generation);
             
-        Assert.That(world.IsValid(entity.Id, entity.Generation), 
-            Is.False);
+        Assert.That(world.IsValid(entity.Id, entity.Generation), Is.False);
     }
         
     [Test]
