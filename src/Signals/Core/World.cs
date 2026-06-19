@@ -9,14 +9,14 @@ using System.Runtime.CompilerServices;
 
 namespace Signals;
 
-public struct ComponentMask : IEnumerable<int> {
+public struct ComponentMask : IEnumerable<i32> {
     private Bitset256 bucket0;
     private Bitset256 bucket1;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Set(int componentId) {
-        int bucket = componentId >> 8; // div 256
-        int bit = componentId & 0xFF;  // mod 256
+    public void Set(i32 componentId) {
+        i32 bucket = componentId >> 8; // div 256
+        i32 bit = componentId & 0xFF;  // mod 256
         
         if (bucket == 0) {
             bucket0.Set(bit);
@@ -28,9 +28,9 @@ public struct ComponentMask : IEnumerable<int> {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Clear(int componentId) {
-        int bucket = componentId >> 8;
-        int bit = componentId & 0xFF;
+    public void Clear(i32 componentId) {
+        i32 bucket = componentId >> 8;
+        i32 bit = componentId & 0xFF;
         
         if (bucket == 0) {
             bucket0.Clear(bit);
@@ -40,9 +40,9 @@ public struct ComponentMask : IEnumerable<int> {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsSet(int componentId) {
-        int bucket = componentId >> 8;
-        int bit = componentId & 0xFF;
+    public bool IsSet(i32 componentId) {
+        i32 bucket = componentId >> 8;
+        i32 bit = componentId & 0xFF;
         
         if (bucket == 0) return bucket0.IsSet(bit);
         if (bucket == 1) return bucket1.IsSet(bit);
@@ -51,14 +51,14 @@ public struct ComponentMask : IEnumerable<int> {
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Contains(in ComponentMask other) {
-        return bucket0.Contains(in other.bucket0) && 
-               bucket1.Contains(in other.bucket1);
+        return bucket0.Contains(in other.bucket0) 
+               && bucket1.Contains(in other.bucket1);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool AndAny(in ComponentMask other) {
-        return bucket0.AndAny(in other.bucket0) || 
-               bucket1.AndAny(in other.bucket1);
+        return bucket0.AndAny(in other.bucket0) 
+               || bucket1.AndAny(in other.bucket1);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -89,11 +89,11 @@ public struct ComponentMask : IEnumerable<int> {
         bucket1 = Bitset256.Zero;
     }
 
-    public IEnumerator<int> GetEnumerator() {
-        foreach (int bit in bucket0) {
+    public IEnumerator<i32> GetEnumerator() {
+        foreach (i32 bit in bucket0) {
             yield return bit;
         }
-        foreach (int bit in bucket1) {
+        foreach (i32 bit in bucket1) {
             yield return 256 | bit;
         }
     }
@@ -101,7 +101,7 @@ public struct ComponentMask : IEnumerable<int> {
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     [DoesNotReturn]
-    private static void ThrowComponentOverflow(int id) => throw new IndexOutOfRangeException($"component index {id} exceeds the component limit!");
+    private static void ThrowComponentOverflow(i32 id) => throw new IndexOutOfRangeException($"component index {id} exceeds the component limit!");
 }
 
 public static class Component {
