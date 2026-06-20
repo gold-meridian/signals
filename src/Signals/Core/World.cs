@@ -171,7 +171,7 @@ public sealed class World : IDisposable {
 
     private ISparseSet?[] componentStores = new ISparseSet[Component.Count];
 
-    internal ComponentMask[] Masks = new ComponentMask[1024];
+    public ComponentMask[] Masks = new ComponentMask[1024];
     internal BitmaskArray256 PresenceMask;
 
     public static readonly World[] AllWorlds = new World[u16.MaxValue];
