@@ -16,8 +16,10 @@ public struct AppConfig() {
     public string Label;
 }
 
-public sealed class App {
-    private readonly World world;
+public sealed class App(World world) {
+    private readonly World world = world;
+    public ResourceManager Resources { get; } = new();
+    
     private readonly Dictionary<string, SystemHandle> systemsByLabel = new();
     private SystemDescription[] systemsById = new SystemDescription[64];
     private Dictionary<MethodInfo, SystemHandle> systemsByMethod = new();
@@ -25,8 +27,6 @@ public sealed class App {
     
     private readonly Dictionary<Type, List<SystemDescription>> callbacks = new();
     private readonly Dictionary<Type, List<SystemDescription>> sortedCache = new();
-
-    public App(World world) => this.world = world;
 
     public SystemConfigurator AddGeneratedSystem(Delegate systemFn, SystemExecutor executor) => new SystemConfigurator(this, systemFn, executor);
 
