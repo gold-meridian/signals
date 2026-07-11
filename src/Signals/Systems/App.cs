@@ -16,10 +16,8 @@ public struct AppConfig() {
     public string Label;
 }
 
-public sealed class App(World world) {
-    private readonly World world = world;
-    public ResourceManager Resources { get; } = new();
-    
+public sealed class App {
+    private readonly World world;
     private readonly Dictionary<string, SystemHandle> systemsByLabel = new();
     private SystemDescription[] systemsById = new SystemDescription[64];
     private Dictionary<MethodInfo, SystemHandle> systemsByMethod = new();
@@ -27,6 +25,8 @@ public sealed class App(World world) {
     
     private readonly Dictionary<Type, List<SystemDescription>> callbacks = new();
     private readonly Dictionary<Type, List<SystemDescription>> sortedCache = new();
+
+    public App(World world) => this.world = world;
 
     public SystemConfigurator AddGeneratedSystem(Delegate systemFn, SystemExecutor executor) => new SystemConfigurator(this, systemFn, executor);
 
@@ -128,37 +128,5 @@ public sealed class App(World world) {
                 state &= unchecked((byte)~bit_sortable);
             }
         }
-    }
-    
-    public App AddResource<T>(T resource) where T : class {
-        Resources.Add(resource);
-        return this;
-    }
-
-    public App InitResource<T>() where T : class, new() {
-        Resources.Init<T>();
-        return this;
-    }
-    
-    public App AddPlugin(IPlugin plugin) {
-        var graph = new PluginGraph();
-        graph.Add(plugin);
-        
-        foreach (var sortedPlugin in graph.GetSortedPlugins()) {
-            sortedPlugin.Apply(this);
-        }
-        return this;
-    }
-
-    public App AddPlugins(IEnumerable<IPlugin> plugins) {
-        var graph = new PluginGraph();
-        foreach (var plugin in plugins) {
-            graph.Add(plugin);
-        }
-        
-        foreach (var sortedPlugin in graph.GetSortedPlugins()) {
-            sortedPlugin.Apply(this);
-        }
-        return this;
     }
 }
