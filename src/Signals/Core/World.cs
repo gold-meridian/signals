@@ -1,5 +1,6 @@
 ﻿using Signals.Core;
 using Signals.Core.Utils;
+using Signals.Systems;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -168,6 +169,8 @@ public sealed class World : IDisposable {
     internal u16[] Generations = new u16[1024];
     private readonly ConcurrentStack<uint> freeIds = new();
     private u32 nextId;
+    
+    public Resources Resources { get; internal set; }
 
     private ISparseSet?[] componentStores = new ISparseSet[Component.Count];
 

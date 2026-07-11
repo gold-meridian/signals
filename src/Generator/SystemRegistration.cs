@@ -12,8 +12,17 @@ namespace Generator;
 internal static class SystemRegistration {
     private sealed record ParameterDescriptor(
         IParameterSymbol Parameter,
-        RefKind RefKind
+        RefKind RefKind,
+        ParameterKind Kind
     );
+
+    private enum ParameterKind {
+        Component,
+        Entity,
+        Commands,
+        Resource,
+        MutableResource
+    }
 
     private sealed record SystemDescriptor(
         IMethodSymbol Method,
@@ -30,26 +39,54 @@ internal static class SystemRegistration {
                 static (ctx, _) => (IMethodSymbol)ctx.TargetSymbol
             ).Collect().Combine(context.CompilationProvider);
 
-            context.RegisterSourceOutput(
-                systemMethods,
-                EmitSystems
-            );
+            context.RegisterSourceOutput(systemMethods, EmitSystems);
         }
     }
 
-    private static SystemDescriptor CreateSystemDescriptor(INamedTypeSymbol withoutAttribute, IMethodSymbol method) {
+    private static ParameterKind GetParameterKind(
+        ITypeSymbol type,
+        INamedTypeSymbol? resType,
+        INamedTypeSymbol? mutType,
+        INamedTypeSymbol entitySymbol,
+        INamedTypeSymbol commandsSymbol
+    ) {
+        if (SymbolEqualityComparer.Default.Equals(type, entitySymbol))
+            return ParameterKind.Entity;
+        
+        if (SymbolEqualityComparer.Default.Equals(type, commandsSymbol))
+            return ParameterKind.Commands;
+
+        if (type is INamedTypeSymbol namedType) {
+            if (resType != null && SymbolEqualityComparer.Default.Equals(namedType.ConstructedFrom, resType))
+                return ParameterKind.Resource;
+            
+            if (mutType != null && SymbolEqualityComparer.Default.Equals(namedType.ConstructedFrom, mutType))
+                return ParameterKind.MutableResource;
+        }
+
+        return ParameterKind.Component;
+    }
+
+    private static SystemDescriptor CreateSystemDescriptor(
+        INamedTypeSymbol withoutAttribute,
+        IMethodSymbol method,
+        INamedTypeSymbol? resType,
+        INamedTypeSymbol? mutType,
+        INamedTypeSymbol entitySymbol,
+        INamedTypeSymbol commandsSymbol
+    ) {
         var parameters = new ParameterDescriptor[method.Parameters.Length];
         var without = new List<ITypeSymbol>();
 
         for (var i = 0; i < method.Parameters.Length; i++) {
             var parameter = method.Parameters[i];
-            parameters[i] = new ParameterDescriptor(parameter, parameter.RefKind);
+            var kind = GetParameterKind(parameter.Type, resType, mutType, entitySymbol, commandsSymbol);
+            parameters[i] = new ParameterDescriptor(parameter, parameter.RefKind, kind);
         }
 
         foreach (var attribute in method.GetAttributes()) {
-            if (attribute.AttributeClass is not { } attributeType) {
+            if (attribute.AttributeClass is not { } attributeType)
                 continue;
-            }
 
             if (SymbolEqualityComparer.Default.Equals(attributeType.ConstructedFrom, withoutAttribute)) {
                 without.Add(attributeType.TypeArguments[0]);
@@ -59,30 +96,34 @@ internal static class SystemRegistration {
         return new SystemDescriptor(method, parameters, without);
     }
 
-    private static void EmitSystems(SourceProductionContext ctx, (ImmutableArray<IMethodSymbol>, Compilation) pair) {
+    private static void EmitSystems(
+        SourceProductionContext ctx,
+        (ImmutableArray<IMethodSymbol>, Compilation) pair
+    ) {
         var (systemMethods, compilation) = pair;
 
         var withoutAttributeSymbol = compilation.GetTypeByMetadataName("Signals.WithoutAttribute`1");
-        if (withoutAttributeSymbol is null) {
+        if (withoutAttributeSymbol is null)
             return;
-        }
 
         var entitySymbol = compilation.GetTypeByMetadataName("Signals.Entity");
-        if (entitySymbol is null) {
+        if (entitySymbol is null)
             return;
-        }
 
         var commandsSymbol = compilation.GetTypeByMetadataName("Signals.Commands");
-        if (commandsSymbol is null) {
+        if (commandsSymbol is null)
             return;
-        }
 
-        if (systemMethods.IsDefaultOrEmpty) {
+        var resSymbol = compilation.GetTypeByMetadataName("Signals.Systems.Res`1");
+        var mutSymbol = compilation.GetTypeByMetadataName("Signals.Systems.Mut`1");
+
+        if (systemMethods.IsDefaultOrEmpty)
             return;
-        }
 
         var queryIds = new Dictionary<string, int>();
-        var systems = systemMethods.Select(x => CreateSystemDescriptor(withoutAttributeSymbol, x)).ToArray();
+        var systems = systemMethods.Select(x => CreateSystemDescriptor(
+            withoutAttributeSymbol, x, resSymbol, mutSymbol, entitySymbol, commandsSymbol
+        )).ToArray();
 
         using var writer = new IndentedStringWriter();
 
@@ -91,12 +132,13 @@ internal static class SystemRegistration {
         writer.WriteLine("using Signals;");
         writer.WriteLine("using Signals.Systems;");
         writer.WriteLine();
+
         using (writer.BeginScope($"namespace Signals")) {
             EmitDelegates(writer, systems);
 
             var generated = new HashSet<string>();
             foreach (var system in systems) {
-                EmitExecutor(writer, system, entitySymbol, commandsSymbol, generated);
+                EmitExecutor(writer, system, entitySymbol, commandsSymbol, resSymbol, mutSymbol, generated);
                 writer.WriteLine();
             }
 
@@ -105,19 +147,11 @@ internal static class SystemRegistration {
 
         foreach (var system in systems) {
             writer.WriteLine();
-            EmitNamespace(
-                writer,
-                system.Method.ContainingType,
-                () => {
-                    EmitContainingTypes(
-                        writer,
-                        system.Method.ContainingType,
-                        () => {
-                            EmitBindingMethod(writer, system, GetQueryId(queryIds, system));
-                        }
-                    );
-                }
-            );
+            EmitNamespace(writer, system.Method.ContainingType, () => {
+                EmitContainingTypes(writer, system.Method.ContainingType, () => {
+                    EmitBindingMethod(writer, system, GetQueryId(queryIds, system));
+                });
+            });
         }
 
         ctx.AddSource("SignalsGeneratedSystems.g.cs", SourceText.From(writer.Builder.ToString(), Encoding.UTF8));
@@ -131,18 +165,12 @@ internal static class SystemRegistration {
         using (writer.BeginScope($"internal static class SystemRegistrationExtensions")) {
             var first = true;
             foreach (var signatureGroup in systems.GroupBy(GetDelegateName)) {
-                if (!first) {
+                if (!first)
                     writer.WriteLine();
-                }
-                else {
+                else
                     first = false;
-                }
 
-                EmitAddSystemOverload(
-                    writer,
-                    signatureGroup.ToArray(),
-                    queryIds
-                );
+                EmitAddSystemOverload(writer, signatureGroup.ToArray(), queryIds);
             }
         }
     }
@@ -167,9 +195,8 @@ internal static class SystemRegistration {
 
                 foreach (var system in systems) {
                     var queryId = GetQueryId(queryIds, system);
-                    if (!handledIds.Add(queryId)) {
+                    if (!handledIds.Add(queryId))
                         continue;
-                    }
 
                     writer.WriteLine($"case {queryId}:");
                     writer.Indent++;
@@ -190,8 +217,7 @@ internal static class SystemRegistration {
 
         if (ns.IsGlobalNamespace) {
             action();
-        }
-        else {
+        } else {
             using (writer.BeginScope($"namespace {ns.ToDisplayString()}")) {
                 action();
             }
@@ -210,21 +236,7 @@ internal static class SystemRegistration {
         return builder.ToImmutable();
     }
 
-    private static string GetAccessibility(Accessibility accessibility) {
-        return accessibility switch {
-            Accessibility.Public => "public",
-            Accessibility.Internal => "internal",
-            Accessibility.Private => "private",
-            Accessibility.Protected => "protected",
-            Accessibility.ProtectedAndInternal => "private protected",
-            Accessibility.ProtectedOrInternal => "protected internal",
-            _ => "",
-        };
-    }
-
     private static string GetTypeDeclaration(INamedTypeSymbol type) {
-        // var accessibility = GetAccessibility(type.DeclaredAccessibility);
-
         var kind = type.TypeKind switch {
             TypeKind.Class => "class",
             TypeKind.Struct => "struct",
@@ -232,15 +244,13 @@ internal static class SystemRegistration {
             _ => "class",
         };
 
-        if (type.IsRecord) {
+        if (type.IsRecord)
             kind = "record " + kind;
-        }
 
         var generics = type.TypeParameters.Length == 0
             ? ""
             : "<" + string.Join(", ", type.TypeParameters.Select(x => x.Name)) + ">";
 
-        // return $"{accessibility} partial {kind} {type.Name}{generics}";
         return $"partial {kind} {type.Name}{generics}";
     }
 
@@ -272,9 +282,8 @@ internal static class SystemRegistration {
     private static int GetQueryId(Dictionary<string, int> queryIds, SystemDescriptor system) {
         var key = GetNameFromFullQuery(system);
 
-        if (queryIds.TryGetValue(key, out var id)) {
+        if (queryIds.TryGetValue(key, out var id))
             return id;
-        }
 
         id = queryIds.Count;
         queryIds.Add(key, id);
@@ -288,10 +297,8 @@ internal static class SystemRegistration {
         writer.WriteLine($"[GeneratedSystemBinding({queryId})]");
 
         var returnType = method.ReturnType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        //var accessibility = GetAccessibility(method.DeclaredAccessibility);
         var parameters = string.Join(", ", method.Parameters.Select(GetParameterDeclaration));
 
-        //writer.WriteLine($"{accessibility} partial {returnType} {method.Name}({parameters});");
         writer.WriteLine($"public {staticText}partial {returnType} {method.Name}({parameters});");
     }
 
@@ -300,29 +307,39 @@ internal static class SystemRegistration {
 
         foreach (var system in systems) {
             var name = GetDelegateName(system);
-            if (!generated.Add(name)) {
+            if (!generated.Add(name))
                 continue;
-            }
 
-            var parameters = string.Join(", ", system.Parameters.Select(x => $"{GetParameterKey(x, identifier: false)} {x.Parameter.Name}"));
+            var parameters = string.Join(
+                ", ",
+                system.Parameters.Select(x =>
+                    $"{GetParameterKey(x, identifier: false)} {x.Parameter.Name}"
+                )
+            );
             writer.WriteLine($"internal delegate void {name}({parameters});");
             writer.WriteLine();
         }
     }
 
-    private static void EmitExecutor(IndentedStringWriter writer, SystemDescriptor descriptor, INamedTypeSymbol entitySymbol, INamedTypeSymbol commandsSymbol, HashSet<string> generated) {
+    private static void EmitExecutor(
+        IndentedStringWriter writer,
+        SystemDescriptor descriptor,
+        INamedTypeSymbol entitySymbol,
+        INamedTypeSymbol commandsSymbol,
+        INamedTypeSymbol? resSymbol,
+        INamedTypeSymbol? mutSymbol,
+        HashSet<string> generated
+    ) {
         var executorName = GetExecutorName(descriptor);
-        if (!generated.Add(executorName)) {
+        if (!generated.Add(executorName))
             return;
-        }
 
         var needsEntityIteration = descriptor.Parameters.Any(p => {
-            var type = p.Parameter.Type;
-            if (SymbolEqualityComparer.Default.Equals(type, entitySymbol)) 
-                return true;
-            if (SymbolEqualityComparer.Default.Equals(type, commandsSymbol))
-                return false;
-            return true;
+            return p.Kind switch {
+                ParameterKind.Entity or ParameterKind.Component => true,
+                ParameterKind.Commands or ParameterKind.Resource or ParameterKind.MutableResource => false,
+                _ => false
+            };
         });
 
         using (writer.BeginScope($"internal static class {executorName}")) {
@@ -333,33 +350,40 @@ internal static class SystemRegistration {
                     writer.Write("typed(");
 
                     for (var i = 0; i < descriptor.Parameters.Length; i++) {
-                        if (i != 0) {
+                        if (i != 0)
                             writer.Write(", ");
-                        }
 
                         var parameter = descriptor.Parameters[i];
-                        var prefix = parameter.RefKind switch {
-                            RefKind.Ref => "ref ",
-                            RefKind.In => "in ",
-                            _ => "",
-                        };
 
-                        writer.Write(prefix + "commands");
+                        switch (parameter.Kind) {
+                            case ParameterKind.Commands:
+                                writer.Write("commands");
+                                break;
+                            case ParameterKind.Resource:
+                                var resTypeArg = GetResourceTypeArgument(parameter.Parameter.Type);
+                                writer.Write(
+                                    $"new global::Signals.Systems.Res<{resTypeArg}>(world.Resources.Get<{resTypeArg}>())"
+                                );
+                                break;
+                            case ParameterKind.MutableResource:
+                                var mutTypeArg = GetResourceTypeArgument(parameter.Parameter.Type);
+                                writer.Write(
+                                    $"new global::Signals.Systems.Mut<{mutTypeArg}> {{ Value = world.Resources.Get<{mutTypeArg}>() }}"
+                                );
+                                break;
+                        }
                     }
 
                     writer.WriteLine(");");
-                }
-                else {
+                } else {
                     writer.WriteLine("var query = world.Query()");
 
                     foreach (var parameter in descriptor.Parameters) {
-                        var type = parameter.Parameter.Type;
-
-                        if (type.Name is "Entity" or "Commands") {
+                        if (parameter.Kind != ParameterKind.Component)
                             continue;
-                        }
 
-                        writer.WriteLine($"    .With<{GetTypeKey(type, false)}>()");
+                        writer.WriteLine(
+                            $"    .With<{GetTypeKey(parameter.Parameter.Type, false)}>()");
                     }
 
                     foreach (var without in descriptor.Without) {
@@ -373,12 +397,10 @@ internal static class SystemRegistration {
                         writer.Write("typed(");
 
                         for (var i = 0; i < descriptor.Parameters.Length; i++) {
-                            if (i != 0) {
+                            if (i != 0)
                                 writer.Write(", ");
-                            }
 
                             var parameter = descriptor.Parameters[i];
-                            var type = parameter.Parameter.Type;
 
                             var prefix = parameter.RefKind switch {
                                 RefKind.Ref => "ref ",
@@ -386,17 +408,31 @@ internal static class SystemRegistration {
                                 _ => "",
                             };
 
-                            if (SymbolEqualityComparer.Default.Equals(type, entitySymbol)) {
-                                writer.Write(prefix + "entity");
-                                continue;
+                            switch (parameter.Kind) {
+                                case ParameterKind.Entity:
+                                    writer.Write(prefix + "entity");
+                                    break;
+                                case ParameterKind.Commands:
+                                    writer.Write(prefix + "commands");
+                                    break;
+                                case ParameterKind.Component:
+                                    writer.Write(
+                                        prefix + $"entity.Get<{GetTypeKey(parameter.Parameter.Type, false)}>()"
+                                    );
+                                    break;
+                                case ParameterKind.Resource:
+                                    var resTypeArg = GetResourceTypeArgument(parameter.Parameter.Type);
+                                    writer.Write(
+                                        $"new global::Signals.Systems.Res<{resTypeArg}>(world.Resources.Get<{resTypeArg}>())"
+                                    );
+                                    break;
+                                case ParameterKind.MutableResource:
+                                    var mutTypeArg = GetResourceTypeArgument(parameter.Parameter.Type);
+                                    writer.Write(
+                                        $"new global::Signals.Systems.Mut<{mutTypeArg}> {{ Value = world.Resources.Get<{mutTypeArg}>() }}"
+                                    );
+                                    break;
                             }
-
-                            if (SymbolEqualityComparer.Default.Equals(type, commandsSymbol)) {
-                                writer.Write(prefix + "commands");
-                                continue;
-                            }
-
-                            writer.Write(prefix + $"entity.Get<{GetTypeKey(type, false)}>()");
                         }
 
                         writer.WriteLine(");");
@@ -404,6 +440,15 @@ internal static class SystemRegistration {
                 }
             }
         }
+    }
+
+    private static string GetResourceTypeArgument(ITypeSymbol type) {
+        if (type is INamedTypeSymbol named && named.TypeArguments.Length > 0) {
+            return named.TypeArguments[0].ToDisplayString(
+                SymbolDisplayFormat.FullyQualifiedFormat
+            );
+        }
+        return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
     }
 
     private static string GetExecutorName(SystemDescriptor descriptor) {
@@ -418,9 +463,8 @@ internal static class SystemRegistration {
         var sb = new StringBuilder();
 
         for (var i = 0; i < descriptor.Parameters.Length; i++) {
-            if (i > 0) {
+            if (i > 0)
                 sb.Append("__");
-            }
 
             sb.Append(GetParameterKey(descriptor.Parameters[i], identifier: true));
         }
@@ -448,9 +492,8 @@ internal static class SystemRegistration {
 
         var parts = new[] { withoutPart };
         foreach (var part in parts) {
-            if (string.IsNullOrEmpty(part)) {
+            if (string.IsNullOrEmpty(part))
                 continue;
-            }
 
             sb.Append("__");
             sb.Append(part);
@@ -463,18 +506,23 @@ internal static class SystemRegistration {
         var key = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Omitted));
 
         if (identifier) {
-            key = key.Replace('.', '_');
+            key = key.Replace('<', '_')
+                    .Replace('>', '_')
+                    .Replace(',', '_')
+                    .Replace(' ', '_')
+                    .Replace('.', '_');
         }
 
         return key;
     }
 
     private static string GetWithoutKey(SystemDescriptor descriptor, bool identifier) {
-        if (descriptor.Without.Count == 0) {
+        if (descriptor.Without.Count == 0)
             return string.Empty;
-        }
 
-        var ordered = descriptor.Without.Select(x => GetTypeKey(x, identifier)).OrderBy(x => x, StringComparer.Ordinal);
+        var ordered = descriptor.Without
+            .Select(x => GetTypeKey(x, identifier))
+            .OrderBy(x => x, StringComparer.Ordinal);
         return string.Join("__", ordered);
     }
 }

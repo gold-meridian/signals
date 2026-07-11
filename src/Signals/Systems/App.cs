@@ -12,12 +12,18 @@ namespace Signals.Systems;
 
  */
 
+public interface IPlugin {
+    void Apply(App app);
+}
+
 public struct AppConfig() {
     public string Label;
 }
 
 public sealed class App {
     private readonly World world;
+    public Resources Resources { get; } = new();
+    
     private readonly Dictionary<string, SystemHandle> systemsByLabel = new();
     private SystemDescription[] systemsById = new SystemDescription[64];
     private Dictionary<MethodInfo, SystemHandle> systemsByMethod = new();
@@ -26,7 +32,10 @@ public sealed class App {
     private readonly Dictionary<Type, List<SystemDescription>> callbacks = new();
     private readonly Dictionary<Type, List<SystemDescription>> sortedCache = new();
 
-    public App(World world) => this.world = world;
+    public App(World world) {
+        this.world = world;
+        this.world.Resources = Resources;
+    }
 
     public SystemConfigurator AddGeneratedSystem(Delegate systemFn, SystemExecutor executor) => new SystemConfigurator(this, systemFn, executor);
 
@@ -129,4 +138,9 @@ public sealed class App {
             }
         }
     }
+    
+    public void AddPlugin(IPlugin plugin) {
+        plugin.Apply(this);
+    }
+
 }
