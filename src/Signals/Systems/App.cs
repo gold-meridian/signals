@@ -129,4 +129,36 @@ public sealed class App(World world) {
             }
         }
     }
+    
+    public App AddResource<T>(T resource) where T : class {
+        Resources.Add(resource);
+        return this;
+    }
+
+    public App InitResource<T>() where T : class, new() {
+        Resources.Init<T>();
+        return this;
+    }
+    
+    public App AddPlugin(IPlugin plugin) {
+        var graph = new PluginGraph();
+        graph.Add(plugin);
+        
+        foreach (var sortedPlugin in graph.GetSortedPlugins()) {
+            sortedPlugin.Apply(this);
+        }
+        return this;
+    }
+
+    public App AddPlugins(IEnumerable<IPlugin> plugins) {
+        var graph = new PluginGraph();
+        foreach (var plugin in plugins) {
+            graph.Add(plugin);
+        }
+        
+        foreach (var sortedPlugin in graph.GetSortedPlugins()) {
+            sortedPlugin.Apply(this);
+        }
+        return this;
+    }
 }
